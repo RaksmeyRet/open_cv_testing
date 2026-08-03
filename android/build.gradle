@@ -1,0 +1,94 @@
+group = "com.example.native_opencv"
+version = "1.0-SNAPSHOT"
+
+buildscript {
+    ext.kotlin_version = "2.1.0"
+    repositories {
+        google()
+        mavenCentral()
+    }
+
+    dependencies {
+        classpath("com.android.tools.build:gradle:8.7.0")
+        classpath("org.jetbrains.kotlin:kotlin-gradle-plugin:$kotlin_version")
+    }
+}
+
+allprojects {
+    repositories {
+        google()
+        mavenCentral()
+    }
+}
+
+apply plugin: "com.android.library"
+apply plugin: "kotlin-android"
+
+android {
+    namespace = "com.example.native_opencv"
+
+    compileSdk = 36
+
+    compileOptions {
+        sourceCompatibility = JavaVersion.VERSION_11
+        targetCompatibility = JavaVersion.VERSION_11
+    }
+
+    kotlinOptions {
+        jvmTarget = JavaVersion.VERSION_11
+    }
+
+    sourceSets {
+        main.java.srcDirs += "src/main/kotlin"
+        test.java.srcDirs += "src/test/kotlin"
+    }
+
+    defaultConfig {
+        minSdk = 31
+
+        ndk {
+            // Match the architectures present in sdk/native/libs/
+            abiFilters 'arm64-v8a', 'armeabi-v7a', 'x86_64'
+        }
+
+        externalNativeBuild {
+            cmake {
+                // Enable RTTI and exceptions (required by OpenCV)
+                cppFlags "-frtti -fexceptions -std=c++14"
+
+                // Point CMake to the OpenCV JNI directory
+                arguments "-DOpenCV_DIR=" + project.file('sdk/native/jni').absolutePath
+            }
+        }
+    }
+
+    externalNativeBuild {
+        cmake {
+            path "../src/CMakeLists.txt"
+        }
+    }
+
+    sourceSets {
+        main {
+            // Tells Gradle to package the OpenCV prebuilt .so files
+            jniLibs.srcDirs = ['sdk/native/libs']
+        }
+    }
+
+    dependencies {
+        testImplementation("org.jetbrains.kotlin:kotlin-test")
+        testImplementation("org.mockito:mockito-core:5.0.0")
+    }
+
+    testOptions {
+        unitTests.all {
+            useJUnitPlatform()
+
+            testLogging {
+               events "passed", "skipped", "failed", "standardOut", "standardError"
+               outputs.upToDateWhen {false}
+               showStandardStreams = true
+            }
+        }
+    }
+}
