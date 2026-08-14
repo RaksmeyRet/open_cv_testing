@@ -1,0 +1,27 @@
+# Exclude large OpenCV binary SDKs from pub.dev publish.
+# Users must download and provide the OpenCV SDK themselves.
+# See README.md > Android Setup / iOS Setup for instructions.
+
+# Android OpenCV SDK (prebuilt .so files + JNI headers — ~945 MB)
+android/sdk/
+
+# iOS OpenCV framework (prebuilt xcframework — ~1.7 GB)
+ios/opencv2.framework/
+
+# Android build artefacts
+android/.cxx/
+android/.gradle/
+android/build/
+android/local.properties
+
+# IDE / OS artefacts
+.DS_Store
+.idea/
+.vscode/
+*.iml
+
+# Dart/Flutter generated files (not needed by pub consumers)
+.dart_tool/
+.fvm/
+.fvmrc
+pubspec.lock
