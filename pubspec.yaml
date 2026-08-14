@@ -1,11 +1,11 @@
-name: native_opencv
+name: native_opencv_kit
 description: >-
   A Flutter FFI plugin that wraps OpenCV for Android and iOS. Provides
   real-time blur detection and ID-card cropping using native C++ via dart:ffi.
 version: 1.0.0
-homepage: https://github.com/socheatcheng/native_opencv
-repository: https://github.com/socheatcheng/native_opencv
-issue_tracker: https://github.com/socheatcheng/native_opencv/issues
+homepage: https://github.com/socheatcheng/native_opencv_kit
+repository: https://github.com/socheatcheng/native_opencv_kit
+issue_tracker: https://github.com/socheatcheng/native_opencv_kit/issues
 
 topics:
   - opencv

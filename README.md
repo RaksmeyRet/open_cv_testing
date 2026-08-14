@@ -21,7 +21,7 @@ Add to your `pubspec.yaml`:
 
 ```yaml
 dependencies:
-  native_opencv: ^1.0.0
+  native_opencv_kit: ^1.0.0
 ```
 
 Then run:
@@ -105,7 +105,7 @@ The plugin's `native_opencv.podspec` already declares the framework as a vendore
 ## Usage
 
 ```dart
-import 'package:native_opencv/native_opencv.dart';
+import 'package:native_opencv_kit/native_opencv.dart';
 
 // 1. Get the linked OpenCV version
 final version = NativeOpencv.getOpenCVVersion();
