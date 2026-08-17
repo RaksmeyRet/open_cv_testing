@@ -2,8 +2,8 @@ import 'package:flutter/material.dart';
 import 'dart:async';
 
 import 'package:flutter/services.dart';
-import 'package:native_opencv/native_opencv.dart';
-import 'package:native_opencv_example/camera_capture.dart';
+import 'package:native_opencv_kit/native_opencv.dart';
+import 'package:native_opencv_kit_example/camera_capture.dart';
 
 void main() {
   runApp(const MyApp());
