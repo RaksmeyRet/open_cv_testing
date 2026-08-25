@@ -456,7 +456,7 @@
 
 import 'dart:async';
 import 'dart:convert';
-import 'dart:io';
+import 'dart:io'; 
 import 'dart:ui' as ui;
 
 import 'package:camera/camera.dart';
@@ -518,15 +518,26 @@ class _CameraCaptureScreenState extends State<CameraCaptureScreen>
   }
 
   Future<void> _initCamera() async {
-    final cameras = await availableCameras();
+    late final List<CameraDescription> cameras;
+    try {
+      cameras = await availableCameras();
+    } catch (e) {
+      if (mounted) {
+        setState(() => _statusMessage = 'Camera access failed: $e');
+      }
+      return;
+    }
+
     if (cameras.isEmpty) {
-      setState(() => _statusMessage = 'No cameras found on this device.');
+      if (mounted) {
+        setState(() => _statusMessage = 'No cameras found on this device.');
+      }
       return;
     }
 
     _controller = CameraController(
       cameras.first,
-      ResolutionPreset.max,
+      ResolutionPreset.high,
       enableAudio: false,
       imageFormatGroup: ImageFormatGroup.yuv420,
     );
@@ -534,7 +545,9 @@ class _CameraCaptureScreenState extends State<CameraCaptureScreen>
     try {
       await _controller!.initialize();
     } catch (e) {
-      setState(() => _statusMessage = 'Camera init failed: $e');
+      if (mounted) {
+        setState(() => _statusMessage = 'Camera init failed: $e');
+      }
       return;
     }
 
@@ -544,20 +557,30 @@ class _CameraCaptureScreenState extends State<CameraCaptureScreen>
   }
 
   void _startStream() {
-    if (_controller == null || _isStreaming) return;
+    final controller = _controller;
+    if (controller == null || !controller.value.isInitialized || _isStreaming) {
+      return;
+    }
     _isStreaming = true;
 
-    _controller!.startImageStream((CameraImage image) {
-      final now = DateTime.now();
-      if (_isProcessing || _busyWithResult) return;
-      if (_lastProcessedAt != null &&
-          now.difference(_lastProcessedAt!) < _processThrottle) {
-        return;
-      }
-      _lastProcessedAt = now;
-      _isProcessing = true;
-      _processFrame(image).whenComplete(() => _isProcessing = false);
-    });
+    controller
+        .startImageStream((CameraImage image) {
+          final now = DateTime.now();
+          if (_isProcessing || _busyWithResult) return;
+          if (_lastProcessedAt != null &&
+              now.difference(_lastProcessedAt!) < _processThrottle) {
+            return;
+          }
+          _lastProcessedAt = now;
+          _isProcessing = true;
+          _processFrame(image).whenComplete(() => _isProcessing = false);
+        })
+        .catchError((Object error) {
+          _isStreaming = false;
+          if (mounted) {
+            setState(() => _statusMessage = 'Camera stream failed: $error');
+          }
+        });
   }
 
   Future<void> _stopStream() async {
