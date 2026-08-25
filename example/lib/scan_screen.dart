@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
+import 'package:image_cropper/image_cropper.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:http/http.dart' as http;
 
@@ -20,6 +21,7 @@ class _ScanScreenState extends State<ScanScreen> {
     (_) => TextEditingController(),
   );
 
+  File? _selectedImage;
   bool _isPicking = false;
   bool _showCamera = false;
   CameraController? _cameraController;
@@ -93,10 +95,10 @@ class _ScanScreenState extends State<ScanScreen> {
         setState(() {
           _cameraController = null;
           _showCamera = false;
+          _selectedImage = File(photo.path);
         });
       }
       await controller.dispose();
-      if (mounted && await _runOcr(File(photo.path))) _confirm();
     } catch (error) {
       if (mounted) {
         setState(() => _errorMessage = 'Could not take photo: $error');
@@ -130,10 +132,47 @@ class _ScanScreenState extends State<ScanScreen> {
       );
       if (picked == null) return;
 
-      if (mounted && await _runOcr(File(picked.path))) _confirm();
+      if (mounted) setState(() => _selectedImage = File(picked.path));
     } catch (error) {
       if (mounted) {
         setState(() => _errorMessage = 'Could not open the image: $error');
+      }
+    } finally {
+      if (mounted) setState(() => _isPicking = false);
+    }
+  }
+
+  Future<void> _editCrop() async {
+    final image = _selectedImage;
+    if (image == null || _isPicking) return;
+
+    setState(() => _isPicking = true);
+    try {
+      final cropped = await ImageCropper().cropImage(
+        sourcePath: image.path,
+        maxWidth: 2000,
+        maxHeight: 1400,
+        compressQuality: 92,
+        uiSettings: [
+          AndroidUiSettings(
+            toolbarTitle: 'Crop ID card',
+            toolbarColor: const Color(0xff243b7a),
+            toolbarWidgetColor: Colors.white,
+            activeControlsWidgetColor: const Color(0xff243b7a),
+            lockAspectRatio: false,
+            aspectRatioPresets: [
+              CropAspectRatioPreset.original,
+              CropAspectRatioPreset.ratio4x3,
+            ],
+          ),
+          IOSUiSettings(title: 'Crop ID card', aspectRatioLockEnabled: false),
+        ],
+      );
+      if (cropped == null || !mounted) return;
+      if (await _runOcr(File(cropped.path)) && mounted) _confirm();
+    } catch (error) {
+      if (mounted) {
+        setState(() => _errorMessage = 'Could not open crop editor: $error');
       }
     } finally {
       if (mounted) setState(() => _isPicking = false);
@@ -220,7 +259,10 @@ class _ScanScreenState extends State<ScanScreen> {
         ),
         backgroundColor: Colors.transparent,
       ),
-      body: SafeArea(child: _buildEmptyState()),
+      body: SafeArea(
+        child:
+            _selectedImage == null ? _buildEmptyState() : _buildImagePreview(),
+      ),
     );
   }
 
@@ -422,6 +464,58 @@ class _ScanScreenState extends State<ScanScreen> {
                   ),
                 ],
               ),
+    );
+  }
+
+  Widget _buildImagePreview() {
+    return Padding(
+      padding: const EdgeInsets.all(20),
+      child: Column(
+        children: [
+          const Align(
+            alignment: Alignment.centerLeft,
+            child: Text(
+              'Check your image',
+              style: TextStyle(fontSize: 24, fontWeight: FontWeight.w700),
+            ),
+          ),
+          const SizedBox(height: 8),
+          const Align(
+            alignment: Alignment.centerLeft,
+            child: Text(
+              'Edit the crop before reading the ID card details.',
+              style: TextStyle(color: Color(0xff667085)),
+            ),
+          ),
+          const SizedBox(height: 20),
+          Expanded(
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(14),
+              child: Image.file(_selectedImage!, fit: BoxFit.contain),
+            ),
+          ),
+          const SizedBox(height: 20),
+          SizedBox(
+            width: double.infinity,
+            height: 54,
+            child: FilledButton.icon(
+              onPressed: _isPicking ? null : _editCrop,
+              icon: const Icon(Icons.crop),
+              label: Text(_isPicking ? 'Opening crop editor...' : 'Edit crop'),
+            ),
+          ),
+          const SizedBox(height: 10),
+          SizedBox(
+            width: double.infinity,
+            height: 50,
+            child: OutlinedButton.icon(
+              onPressed: _isPicking ? null : _openCamera,
+              icon: const Icon(Icons.camera_alt_outlined),
+              label: const Text('Take another photo'),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
