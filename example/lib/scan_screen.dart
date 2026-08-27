@@ -3,9 +3,10 @@ import 'dart:io';
 
 import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
-import 'package:image_cropper/image_cropper.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:http/http.dart' as http;
+
+import 'four_corner_crop_screen.dart';
 
 class ScanScreen extends StatefulWidget {
   const ScanScreen({super.key});
@@ -23,6 +24,7 @@ class _ScanScreenState extends State<ScanScreen> {
 
   File? _selectedImage;
   bool _isPicking = false;
+  bool _hasCroppedImage = false;
   bool _showCamera = false;
   CameraController? _cameraController;
   String? _errorMessage;
@@ -96,6 +98,7 @@ class _ScanScreenState extends State<ScanScreen> {
           _cameraController = null;
           _showCamera = false;
           _selectedImage = File(photo.path);
+          _hasCroppedImage = false;
         });
       }
       await controller.dispose();
@@ -132,7 +135,12 @@ class _ScanScreenState extends State<ScanScreen> {
       );
       if (picked == null) return;
 
-      if (mounted) setState(() => _selectedImage = File(picked.path));
+      if (mounted) {
+        setState(() {
+          _selectedImage = File(picked.path);
+          _hasCroppedImage = false;
+        });
+      }
     } catch (error) {
       if (mounted) {
         setState(() => _errorMessage = 'Could not open the image: $error');
@@ -148,28 +156,15 @@ class _ScanScreenState extends State<ScanScreen> {
 
     setState(() => _isPicking = true);
     try {
-      final cropped = await ImageCropper().cropImage(
-        sourcePath: image.path,
-        maxWidth: 2000,
-        maxHeight: 1400,
-        compressQuality: 92,
-        uiSettings: [
-          AndroidUiSettings(
-            toolbarTitle: 'Crop ID card',
-            toolbarColor: const Color(0xff243b7a),
-            toolbarWidgetColor: Colors.white,
-            activeControlsWidgetColor: const Color(0xff243b7a),
-            lockAspectRatio: false,
-            aspectRatioPresets: [
-              CropAspectRatioPreset.original,
-              CropAspectRatioPreset.ratio4x3,
-            ],
-          ),
-          IOSUiSettings(title: 'Crop ID card', aspectRatioLockEnabled: false),
-        ],
+      final cropped = await Navigator.of(context).push<File>(
+        MaterialPageRoute(builder: (_) => FourCornerCropScreen(source: image)),
       );
       if (cropped == null || !mounted) return;
-      if (await _runOcr(File(cropped.path)) && mounted) _confirm();
+      setState(() {
+        _selectedImage = cropped;
+        _hasCroppedImage = true;
+        _errorMessage = null;
+      });
     } catch (error) {
       if (mounted) {
         setState(() => _errorMessage = 'Could not open crop editor: $error');
@@ -475,7 +470,7 @@ class _ScanScreenState extends State<ScanScreen> {
           const Align(
             alignment: Alignment.centerLeft,
             child: Text(
-              'Check your image',
+              'Review ID card details',
               style: TextStyle(fontSize: 24, fontWeight: FontWeight.w700),
             ),
           ),
@@ -483,7 +478,7 @@ class _ScanScreenState extends State<ScanScreen> {
           const Align(
             alignment: Alignment.centerLeft,
             child: Text(
-              'Edit the crop before reading the ID card details.',
+              'Adjust the crop, then type or review the card details below.',
               style: TextStyle(color: Color(0xff667085)),
             ),
           ),
@@ -504,6 +499,33 @@ class _ScanScreenState extends State<ScanScreen> {
               label: Text(_isPicking ? 'Opening crop editor...' : 'Edit crop'),
             ),
           ),
+          if (_hasCroppedImage) ...[
+            const SizedBox(height: 20),
+            _buildDetailsForm(),
+            const SizedBox(height: 12),
+            SizedBox(
+              width: double.infinity,
+              height: 50,
+              child: OutlinedButton.icon(
+                onPressed:
+                    _isPicking || _selectedImage == null
+                        ? null
+                        : () => _runOcr(_selectedImage!),
+                icon: const Icon(Icons.auto_awesome),
+                label: const Text('Read text automatically'),
+              ),
+            ),
+            const SizedBox(height: 12),
+            SizedBox(
+              width: double.infinity,
+              height: 52,
+              child: FilledButton.icon(
+                onPressed: _confirm,
+                icon: const Icon(Icons.check),
+                label: const Text('Save details'),
+              ),
+            ),
+          ],
           const SizedBox(height: 10),
           SizedBox(
             width: double.infinity,
@@ -516,6 +538,38 @@ class _ScanScreenState extends State<ScanScreen> {
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildDetailsForm() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'Card information',
+          style: TextStyle(fontSize: 19, fontWeight: FontWeight.w700),
+        ),
+        const SizedBox(height: 12),
+        ...List.generate(
+          _fieldLabels.length,
+          (index) => Padding(
+            padding: const EdgeInsets.only(bottom: 12),
+            child: TextField(
+              controller: _controllers[index],
+              textInputAction:
+                  index == _fieldLabels.length - 1
+                      ? TextInputAction.done
+                      : TextInputAction.next,
+              decoration: InputDecoration(
+                labelText: _fieldLabels[index],
+                border: const OutlineInputBorder(),
+                filled: true,
+                fillColor: Colors.white,
+              ),
+            ),
+          ),
+        ),
+      ],
     );
   }
 }
