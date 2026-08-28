@@ -12,27 +12,41 @@ bool IdCardCropper::autoCropAndBinarize(
         return false;
     }
 
+    cv::Mat resized;
+    const double scale = 1000.0 / image.cols;
+    cv::resize(
+        image,
+        resized,
+        cv::Size(1000, static_cast<int>(image.rows * scale)));
+
     cv::Mat gray;
+    cv::Mat enhanced;
     cv::Mat blurred;
     cv::Mat edged;
 
     cv::cvtColor(
-        image,
+        resized,
         gray,
         cv::COLOR_BGR2GRAY);
 
+    const cv::Ptr<cv::CLAHE> clahe = cv::createCLAHE(2.0, cv::Size(8, 8));
+    clahe->apply(gray, enhanced);
+
     cv::GaussianBlur(
-        gray,
+        enhanced,
         blurred,
         cv::Size(5, 5),
         0);
 
+    cv::bilateralFilter(blurred, blurred, 9, 75, 75);
     cv::Canny(blurred, edged, 50, 150);
 
     const cv::Mat closingKernel =
         cv::getStructuringElement(
             cv::MORPH_RECT,
-            cv::Size(9, 9));
+                cv::Size(5, 5));
+
+            cv::dilate(edged, edged, closingKernel, cv::Point(-1, -1), 2);
 
     cv::morphologyEx(
         edged,
@@ -52,7 +66,7 @@ bool IdCardCropper::autoCropAndBinarize(
     double bestScore = 0.0;
 
     const double imageArea =
-        static_cast<double>(image.cols) * image.rows;
+        static_cast<double>(resized.cols) * resized.rows;
 
     for (const auto &contour : contours)
     {
@@ -61,63 +75,49 @@ bool IdCardCropper::autoCropAndBinarize(
 
         if (
             areaFraction < 0.03 ||
-            areaFraction > 0.60)
+            areaFraction > 0.97)
         {
             continue;
         }
 
-        const cv::RotatedRect rectangle =
-            cv::minAreaRect(contour);
+        std::vector<cv::Point> hull;
+        cv::convexHull(contour, hull);
+        const double perimeter = cv::arcLength(hull, true);
+        if (perimeter <= 0.0)
+        {
+            continue;
+        }
 
+        std::vector<cv::Point> approximation;
+        cv::approxPolyDP(hull, approximation, 0.02 * perimeter, true);
+
+        if (approximation.size() != 4 ||
+            !cv::isContourConvex(approximation))
+        {
+            continue;
+        }
+
+        std::vector<cv::Point2f> candidateCorners;
+        candidateCorners.reserve(4);
+        for (const cv::Point &point : approximation)
+        {
+            candidateCorners.emplace_back(
+                static_cast<float>(point.x),
+                static_cast<float>(point.y));
+        }
+
+        const cv::RotatedRect rectangle = cv::minAreaRect(candidateCorners);
         const double width = rectangle.size.width;
         const double height = rectangle.size.height;
-
         if (width <= 0.0 || height <= 0.0)
         {
             continue;
         }
 
-        const double aspectRatio =
-            std::max(width, height) /
-            std::min(width, height);
-
-        if (
-            aspectRatio < 1.25 ||
-            aspectRatio > 1.95)
-        {
-            continue;
-        }
-
-        std::vector<cv::Point2f> candidateCorners(4);
-        rectangle.points(candidateCorners.data());
-
-        bool touchesImageBoundary = false;
-        const float boundaryMargin = 8.0F;
-
-        for (const cv::Point2f &point : candidateCorners)
-        {
-            if (
-                point.x <= boundaryMargin ||
-                point.y <= boundaryMargin ||
-                point.x >= image.cols - boundaryMargin ||
-                point.y >= image.rows - boundaryMargin)
-            {
-                touchesImageBoundary = true;
-                break;
-            }
-        }
-
-        if (touchesImageBoundary)
-        {
-            continue;
-        }
-
-        const double ratioError =
-            std::abs(aspectRatio - cardAspectRatio_);
-
-        const double score =
-            areaFraction /
-            (1.0 + ratioError * 5.0);
+        const double aspectRatio = std::max(width, height) / std::min(width, height);
+        const double score = 1.0 - std::min(
+            std::abs(aspectRatio - cardAspectRatio_) / cardAspectRatio_,
+            1.0);
 
         if (score > bestScore)
         {
@@ -135,9 +135,9 @@ bool IdCardCropper::autoCropAndBinarize(
     const std::vector<cv::Point2f>
         destinationCorners = {
             cv::Point2f(0.0F, 0.0F),
-            cv::Point2f(1000.0F, 0.0F),
-            cv::Point2f(1000.0F, 630.0F),
-            cv::Point2f(0.0F, 630.0F)};
+            cv::Point2f(999.0F, 0.0F),
+            cv::Point2f(999.0F, 629.0F),
+            cv::Point2f(0.0F, 629.0F)};
 
     const cv::Mat transform =
         cv::getPerspectiveTransform(
@@ -147,13 +147,13 @@ bool IdCardCropper::autoCropAndBinarize(
     cv::Mat cropped;
 
     cv::warpPerspective(
-        image,
+        resized,
         cropped,
         transform,
-        cv::Size(1600, 1200));
+        cv::Size(1000, 630));
 
     binarize(cropped, processedImage);
-    return true;
+    return processedImage.cols == 1000 && processedImage.rows == 630;
 }
 
 std::vector<cv::Point2f> IdCardCropper::sortCorners(

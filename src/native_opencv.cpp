@@ -13,9 +13,11 @@ static IdCardCropper cropper;
 static constexpr int kIdCardOutputWidth = 1000;
 static constexpr int kIdCardOutputHeight = 630;
 
+#define NATIVE_OPENCV_EXPORT
+
 extern "C"
 {
-    __attribute__((visibility("default"))) __attribute__((used))
+    NATIVE_OPENCV_EXPORT
     const char *
     get_opencv_version()
     {
@@ -23,7 +25,7 @@ extern "C"
     }
 
     // Example image processing function
-    __attribute__((visibility("default"))) __attribute__((used)) void grayscale_image(
+    NATIVE_OPENCV_EXPORT void grayscale_image(
         uint8_t *input_pixels,
         uint8_t *output_pixels,
         int width,
@@ -38,12 +40,14 @@ extern "C"
     }
 
     // Returns true if the image is blurry, false if it's sharp enough to use.
-    __attribute__((visibility("default"))) __attribute__((used)) bool blur_check(
+    NATIVE_OPENCV_EXPORT bool blur_check(
         uint8_t *input_pixels,
         int width,
         int height)
     {
-        cv::Mat src(height, width, CV_8UC4, input_pixels);
+        cv::Mat rgba(height, width, CV_8UC4, input_pixels);
+        cv::Mat src;
+        cv::cvtColor(rgba, src, cv::COLOR_RGBA2BGR);
 
         try
         {
@@ -59,13 +63,13 @@ extern "C"
 
     // Returns the fixed output width of the cropped/binarized ID card image.
     // Call this from Dart BEFORE crop_id_card to know how large a buffer to allocate.
-    __attribute__((visibility("default"))) __attribute__((used)) int get_id_card_output_width()
+    NATIVE_OPENCV_EXPORT int get_id_card_output_width()
     {
         return kIdCardOutputWidth;
     }
 
     // Returns the fixed output height of the cropped/binarized ID card image.
-    __attribute__((visibility("default"))) __attribute__((used)) int get_id_card_output_height()
+    NATIVE_OPENCV_EXPORT int get_id_card_output_height()
     {
         return kIdCardOutputHeight;
     }
@@ -76,13 +80,15 @@ extern "C"
     // (RGBA). Returns false if no card was detected, or if the processed
     // image size unexpectedly doesn't match the known fixed output size
     // (output_pixels is left untouched in both cases).
-    __attribute__((visibility("default"))) __attribute__((used)) bool crop_id_card(
+    NATIVE_OPENCV_EXPORT bool crop_id_card(
         uint8_t *input_pixels,
         int width,
         int height,
         uint8_t *output_pixels)
     {
-        cv::Mat src(height, width, CV_8UC4, input_pixels);
+        cv::Mat rgba(height, width, CV_8UC4, input_pixels);
+        cv::Mat src;
+        cv::cvtColor(rgba, src, cv::COLOR_RGBA2BGR);
         cv::Mat processed; // single-channel binary image
 
         try

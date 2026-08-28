@@ -176,6 +176,7 @@ class _ScanScreenState extends State<ScanScreen> {
 
   Future<bool> _runOcr(File imageFile) async {
     setState(() {
+      _isPicking = true;
       _errorMessage = null;
     });
 
@@ -189,7 +190,9 @@ class _ScanScreenState extends State<ScanScreen> {
             ..files.add(
               await http.MultipartFile.fromPath('file', imageFile.path),
             );
-      final streamedResponse = await request.send();
+      final streamedResponse = await request.send().timeout(
+        const Duration(seconds: 45),
+      );
       final response = await http.Response.fromStream(streamedResponse);
 
       if (response.statusCode != 200) {
@@ -212,6 +215,8 @@ class _ScanScreenState extends State<ScanScreen> {
           () => _errorMessage = 'Could not read text from image: $error',
         );
       }
+    } finally {
+      if (mounted) setState(() => _isPicking = false);
     }
     return false;
   }
