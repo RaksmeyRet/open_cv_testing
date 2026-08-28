@@ -3,6 +3,31 @@
 #include <algorithm>
 #include <cmath>
 
+namespace {
+
+double medianIntensity(const cv::Mat& image)
+{
+    std::vector<uchar> pixels;
+    pixels.reserve(image.total());
+
+    for (int row = 0; row < image.rows; ++row)
+    {
+        const uchar* values = image.ptr<uchar>(row);
+        pixels.insert(pixels.end(), values, values + image.cols);
+    }
+
+    if (pixels.empty())
+    {
+        return 0.0;
+    }
+
+    const auto middle = pixels.begin() + pixels.size() / 2;
+    std::nth_element(pixels.begin(), middle, pixels.end());
+    return static_cast<double>(*middle);
+}
+
+} // namespace
+
 bool IdCardCropper::autoCropAndBinarize(
     const cv::Mat &image,
     cv::Mat &processedImage) const
@@ -39,14 +64,23 @@ bool IdCardCropper::autoCropAndBinarize(
         0);
 
     cv::bilateralFilter(blurred, blurred, 9, 75, 75);
-    cv::Canny(blurred, edged, 50, 150);
+
+    const double median = medianIntensity(blurred);
+    const double lowerThreshold = std::max(0.0, 0.66 * median);
+    const double upperThreshold = std::min(255.0, 1.33 * median);
+    cv::Canny(blurred, edged, lowerThreshold, upperThreshold);
 
     const cv::Mat closingKernel =
         cv::getStructuringElement(
             cv::MORPH_RECT,
                 cv::Size(5, 5));
 
-            cv::dilate(edged, edged, closingKernel, cv::Point(-1, -1), 2);
+            cv::dilate(
+                edged,
+                edged,
+                closingKernel,
+                cv::Point(-1, -1),
+                2);
 
     cv::morphologyEx(
         edged,

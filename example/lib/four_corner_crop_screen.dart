@@ -23,8 +23,14 @@ Future<Uint8List> _cropImageInBackground(Map<String, dynamic> input) async {
   final bottomWidth = (corners[2].dx - corners[3].dx).abs() * image.width;
   final leftHeight = (corners[3].dy - corners[0].dy).abs() * image.height;
   final rightHeight = (corners[2].dy - corners[1].dy).abs() * image.height;
-  final outputWidth = math.max(1, math.max(topWidth, bottomWidth).round());
-  final outputHeight = math.max(1, math.max(leftHeight, rightHeight).round());
+  final cropWidth = math.max(1, math.max(topWidth, bottomWidth));
+  final cropHeight = math.max(1, math.max(leftHeight, rightHeight));
+  final outputScale = math.min(
+    1.0,
+    math.min(1600 / cropWidth, 1000 / cropHeight),
+  );
+  final outputWidth = math.max(1, (cropWidth * outputScale).round());
+  final outputHeight = math.max(1, (cropHeight * outputScale).round());
 
   final result = img.copyRectify(
     image,
@@ -65,8 +71,10 @@ class FourCornerCropScreen extends StatefulWidget {
 
 class _FourCornerCropScreenState extends State<FourCornerCropScreen> {
   img.Image? _decodedImage;
+  Uint8List? _sourceBytes;
   List<Offset>? _corners;
   int? _activeCorner;
+  bool _isApplying = false;
   String? _error;
 
   @override
@@ -82,6 +90,7 @@ class _FourCornerCropScreenState extends State<FourCornerCropScreen> {
       if (!mounted || decoded == null) throw Exception('Unsupported image');
       final image = img.bakeOrientation(decoded);
       setState(() {
+        _sourceBytes = bytes;
         _decodedImage = image;
         _corners = [
           const Offset(.08, .12),
@@ -100,10 +109,14 @@ class _FourCornerCropScreenState extends State<FourCornerCropScreen> {
     final corners = _corners;
     if (image == null || corners == null) return;
 
-    setState(() => _activeCorner = null);
+    setState(() {
+      _activeCorner = null;
+      _isApplying = true;
+    });
     try {
+      final sourceBytes = _sourceBytes ?? await widget.source.readAsBytes();
       final encoded = await compute(_cropImageInBackground, {
-        'bytes': await widget.source.readAsBytes(),
+        'bytes': sourceBytes,
         'corners':
             corners.expand((corner) => <double>[corner.dx, corner.dy]).toList(),
       });
@@ -121,6 +134,8 @@ class _FourCornerCropScreenState extends State<FourCornerCropScreen> {
       if (mounted && proceed == true) Navigator.of(context).pop(file);
     } catch (error) {
       if (mounted) setState(() => _error = 'Could not crop image: $error');
+    } finally {
+      if (mounted) setState(() => _isApplying = false);
     }
   }
 
@@ -148,8 +163,8 @@ class _FourCornerCropScreenState extends State<FourCornerCropScreen> {
         foregroundColor: Colors.black87,
         actions: [
           TextButton(
-            onPressed: corners == null ? null : _apply,
-            child: const Text('APPLY'),
+            onPressed: corners == null || _isApplying ? null : _apply,
+            child: Text(_isApplying ? 'CROPPING...' : 'APPLY'),
           ),
         ],
       ),
@@ -266,9 +281,7 @@ class CroppedImagePreviewScreen extends StatelessWidget {
             Expanded(
               child: Padding(
                 padding: const EdgeInsets.all(20),
-                child: Center(
-                  child: Image.file(image, fit: BoxFit.contain),
-                ),
+                child: Center(child: Image.file(image, fit: BoxFit.contain)),
               ),
             ),
             Padding(

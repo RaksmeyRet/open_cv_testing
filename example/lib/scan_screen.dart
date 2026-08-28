@@ -165,6 +165,7 @@ class _ScanScreenState extends State<ScanScreen> {
         _hasCroppedImage = true;
         _errorMessage = null;
       });
+      await _runOcr(cropped);
     } catch (error) {
       if (mounted) {
         setState(() => _errorMessage = 'Could not open crop editor: $error');
@@ -200,10 +201,14 @@ class _ScanScreenState extends State<ScanScreen> {
       }
 
       final decoded = jsonDecode(response.body) as Map<String, dynamic>;
-      final fields = (decoded['fields'] as Map?)?.map(
-        (key, value) => MapEntry(_normalizeKey('$key'), '$value'),
-      );
-      if (fields == null) throw Exception('OCR response has no fields');
+      final fields = _extractOcrFields(decoded);
+      if (fields.isEmpty) throw Exception('OCR response has no fields');
+      _fillMissingMrzFields(fields, decoded);
+
+      final mrzId = _findMrzId(decoded);
+      if (mrzId != null) {
+        fields['idnumber'] = mrzId;
+      }
 
       for (var index = 0; index < _fieldLabels.length; index++) {
         _controllers[index].text = _fieldValue(fields, index);
@@ -221,17 +226,124 @@ class _ScanScreenState extends State<ScanScreen> {
     return false;
   }
 
+  Map<String, String> _extractOcrFields(Map<String, dynamic> response) {
+    final fields = <String, String>{};
+
+    void visit(dynamic value, [String prefix = '']) {
+      if (value is Map) {
+        value.forEach((key, child) {
+          final name = _normalizeKey('$key');
+          if (child is Map || child is List) {
+            visit(child, name);
+          } else if (child != null) {
+            final text = '$child'.trim();
+            if (text.isNotEmpty && text != 'null') {
+              fields[name] = text;
+              if (prefix.isNotEmpty) fields['$prefix$name'] = text;
+            }
+          }
+        });
+      } else if (value is List) {
+        for (final child in value) {
+          visit(child, prefix);
+        }
+      }
+    }
+
+    visit(response['fields'] ?? response);
+    return fields;
+  }
+
+  void _fillMissingMrzFields(
+    Map<String, String> fields,
+    Map<String, dynamic> response,
+  ) {
+    final rawText =
+        [
+          response['raw_text'],
+          response['rawText'],
+          response['text'],
+          response['ocr_text'],
+        ].whereType<String>().join('\n').toUpperCase();
+    if (rawText.isEmpty) return;
+
+    final idMatch = RegExp(r'IDKHM([0-9]{8,})').firstMatch(rawText);
+    if (_fieldValue(fields, 0).isEmpty && idMatch != null) {
+      fields['idnumber'] = idMatch.group(1)!;
+    }
+
+    final dateMatch = RegExp(
+      r'(?<![0-9])([0-9]{6})[0-9][MF]',
+    ).firstMatch(rawText);
+    if (_fieldValue(fields, 2).isEmpty && dateMatch != null) {
+      fields['dateofbirth'] = _formatMrzDate(dateMatch.group(1)!);
+    }
+  }
+
+  String? _findMrzId(dynamic value) {
+    String? found;
+
+    void visit(dynamic child) {
+      if (found != null) return;
+      if (child is String) {
+        final normalized = child.toUpperCase().replaceAll(' ', '');
+        final match = RegExp(
+          r'IDKHM[^0-9O]{0,4}([0-9O]{8,12})',
+        ).firstMatch(normalized);
+        if (match != null) {
+          found = match.group(1)!.replaceAll('O', '0');
+        }
+      } else if (child is Map) {
+        for (final item in child.values) {
+          visit(item);
+          if (found != null) return;
+        }
+      } else if (child is List) {
+        for (final item in child) {
+          visit(item);
+          if (found != null) return;
+        }
+      }
+    }
+
+    visit(value);
+    return found;
+  }
+
+  String _formatMrzDate(String value) {
+    final year = int.parse(value.substring(0, 2));
+    final fullYear = year <= 50 ? 2000 + year : 1900 + year;
+    return '$fullYear-${value.substring(2, 4)}-${value.substring(4, 6)}';
+  }
+
   String _fieldValue(Map<String, String> fields, int index) {
     const keys = [
-      ['idnumber', 'idno', 'id'],
-      ['name', 'fullname', 'full_name'],
-      ['dateofbirth', 'dob', 'birthdate'],
-      ['expirydate', 'expiry', 'expirationdate'],
-      ['gender', 'sex'],
+      ['idnumber', 'idno', 'identitynumber', 'documentnumber'],
+      [
+        'name',
+        'fullname',
+        'full_name',
+        'fullnameen',
+        'full_name_en',
+        'englishname',
+        'nameen',
+      ],
+      ['dateofbirth', 'dob', 'birthdate', 'birth', 'datebirth'],
+      [
+        'expirydate',
+        'expiry',
+        'expirationdate',
+        'expiration',
+        'dateofexpiry',
+        'validuntil',
+      ],
+      ['gender', 'sex', 'genderidentity'],
     ];
     for (final key in keys[index]) {
       final value = fields[_normalizeKey(key)];
-      if (value != null && value != 'null') return value;
+      if (value != null && value.trim().isNotEmpty && value != 'null') {
+        return value.trim();
+      }
     }
     return '';
   }
@@ -468,9 +580,10 @@ class _ScanScreenState extends State<ScanScreen> {
   }
 
   Widget _buildImagePreview() {
-    return Padding(
+    return SingleChildScrollView(
       padding: const EdgeInsets.all(20),
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           const Align(
             alignment: Alignment.centerLeft,
@@ -488,22 +601,28 @@ class _ScanScreenState extends State<ScanScreen> {
             ),
           ),
           const SizedBox(height: 20),
-          Expanded(
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(14),
-              child: Image.file(_selectedImage!, fit: BoxFit.contain),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(14),
+            child: Image.file(
+              _selectedImage!,
+              height: 220,
+              fit: BoxFit.contain,
             ),
           ),
-          const SizedBox(height: 20),
-          SizedBox(
-            width: double.infinity,
-            height: 54,
-            child: FilledButton.icon(
-              onPressed: _isPicking ? null : _editCrop,
-              icon: const Icon(Icons.crop),
-              label: Text(_isPicking ? 'Opening crop editor...' : 'Edit crop'),
+          if (!_hasCroppedImage) ...[
+            const SizedBox(height: 20),
+            SizedBox(
+              width: double.infinity,
+              height: 54,
+              child: FilledButton.icon(
+                onPressed: _isPicking ? null : _editCrop,
+                icon: const Icon(Icons.crop),
+                label: Text(
+                  _isPicking ? 'Opening crop editor...' : 'Edit crop',
+                ),
+              ),
             ),
-          ),
+          ],
           if (_hasCroppedImage) ...[
             const SizedBox(height: 20),
             _buildDetailsForm(),
