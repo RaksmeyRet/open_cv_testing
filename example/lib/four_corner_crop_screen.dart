@@ -1,10 +1,34 @@
+import 'dart:async';
 import 'dart:io';
 import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:image/image.dart' as img;
+import 'package:native_opencv_kit/native_opencv.dart';
 import 'package:path_provider/path_provider.dart';
+
+const List<Offset> _defaultCorners = [
+  Offset(.08, .12),
+  Offset(.92, .12),
+  Offset(.92, .88),
+  Offset(.08, .88),
+];
+
+/// Runs native corner detection on a decoded image. Must run off the UI
+/// isolate since native_opencv_kit's FFI call does CPU-heavy OpenCV work.
+/// Only primitive/TypedData values are passed since `compute` serializes
+/// the input across an isolate boundary.
+List<double>? _detectCornersInBackground(Map<String, dynamic> input) {
+  final rgba = input['rgba'] as Uint8List;
+  final width = input['width'] as int;
+  final height = input['height'] as int;
+  final corners = NativeOpencv.detectIdCardCorners(rgba, width, height);
+  if (corners == null) return null;
+  return corners
+      .expand((corner) => <double>[corner.dx, corner.dy])
+      .toList();
+}
 
 Future<Uint8List> _cropImageInBackground(Map<String, dynamic> input) async {
   final sourceBytes = input['bytes'] as Uint8List;
@@ -75,6 +99,7 @@ class _FourCornerCropScreenState extends State<FourCornerCropScreen> {
   List<Offset>? _corners;
   int? _activeCorner;
   bool _isApplying = false;
+  bool _isDetecting = false;
   String? _error;
 
   @override
@@ -92,15 +117,35 @@ class _FourCornerCropScreenState extends State<FourCornerCropScreen> {
       setState(() {
         _sourceBytes = bytes;
         _decodedImage = image;
+        _corners = List.of(_defaultCorners);
+      });
+      unawaited(_autoDetectCorners(image));
+    } catch (error) {
+      if (mounted) setState(() => _error = 'Could not load image: $error');
+    }
+  }
+
+  Future<void> _autoDetectCorners(img.Image image) async {
+    setState(() => _isDetecting = true);
+    try {
+      final values = await compute(_detectCornersInBackground, {
+        'rgba': image.getBytes(order: img.ChannelOrder.rgba),
+        'width': image.width,
+        'height': image.height,
+      });
+      if (!mounted || values == null) return;
+      setState(() {
         _corners = [
-          const Offset(.08, .12),
-          const Offset(.92, .12),
-          const Offset(.92, .88),
-          const Offset(.08, .88),
+          Offset(values[0] / image.width, values[1] / image.height),
+          Offset(values[2] / image.width, values[3] / image.height),
+          Offset(values[4] / image.width, values[5] / image.height),
+          Offset(values[6] / image.width, values[7] / image.height),
         ];
       });
     } catch (error) {
-      if (mounted) setState(() => _error = 'Could not load image: $error');
+      debugPrint('Auto-detect corners failed: $error');
+    } finally {
+      if (mounted) setState(() => _isDetecting = false);
     }
   }
 
@@ -180,11 +225,13 @@ class _FourCornerCropScreenState extends State<FourCornerCropScreen> {
               ? const Center(child: CircularProgressIndicator())
               : Column(
                 children: [
-                  const Padding(
-                    padding: EdgeInsets.fromLTRB(20, 14, 20, 12),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 14, 20, 12),
                     child: Text(
-                      'Drag each corner onto the edge of the card',
-                      style: TextStyle(color: Colors.black54),
+                      _isDetecting
+                          ? 'Detecting card edges...'
+                          : 'Drag each corner onto the edge of the card',
+                      style: const TextStyle(color: Colors.black54),
                     ),
                   ),
                   Expanded(
@@ -236,22 +283,36 @@ class _FourCornerCropScreenState extends State<FourCornerCropScreen> {
                   SafeArea(
                     child: Padding(
                       padding: const EdgeInsets.all(16),
-                      child: OutlinedButton.icon(
-                        onPressed:
-                            () => setState(
-                              () =>
-                                  _corners = [
-                                    const Offset(.08, .12),
-                                    const Offset(.92, .12),
-                                    const Offset(.92, .88),
-                                    const Offset(.08, .88),
-                                  ],
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: OutlinedButton.icon(
+                              onPressed:
+                                  () => setState(
+                                    () => _corners = List.of(_defaultCorners),
+                                  ),
+                              icon: const Icon(Icons.refresh),
+                              label: const Text('Reset corners'),
+                              style: OutlinedButton.styleFrom(
+                                foregroundColor: Colors.black87,
+                              ),
                             ),
-                        icon: const Icon(Icons.refresh),
-                        label: const Text('Reset corners'),
-                        style: OutlinedButton.styleFrom(
-                          foregroundColor: Colors.black87,
-                        ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: OutlinedButton.icon(
+                              onPressed:
+                                  _isDetecting
+                                      ? null
+                                      : () => _autoDetectCorners(image),
+                              icon: const Icon(Icons.center_focus_strong),
+                              label: const Text('Auto detect'),
+                              style: OutlinedButton.styleFrom(
+                                foregroundColor: Colors.black87,
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                   ),

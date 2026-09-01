@@ -128,4 +128,42 @@ extern "C"
         return true;
     }
 
+    // Detects the 4 corners of an ID card in the input RGBA buffer, without
+    // cropping/binarizing. out_corners must be pre-allocated by the caller
+    // with 8 floats: [tlX, tlY, trX, trY, brX, brY, blX, blY], in the same
+    // pixel coordinate space as the input image. Returns false if no card
+    // was detected (out_corners is left untouched).
+    NATIVE_OPENCV_EXPORT bool detect_id_card_corners(
+        uint8_t *input_pixels,
+        int width,
+        int height,
+        float *out_corners)
+    {
+        cv::Mat rgba(height, width, CV_8UC4, input_pixels);
+        cv::Mat src;
+        cv::cvtColor(rgba, src, cv::COLOR_RGBA2BGR);
+
+        std::vector<cv::Point2f> corners;
+        try
+        {
+            if (!cropper.detectCorners(src, corners) || corners.size() != 4)
+            {
+                return false;
+            }
+        }
+        catch (const std::exception &error)
+        {
+            std::cerr << "ID card corner detection error: " << error.what() << '\n';
+            return false;
+        }
+
+        for (int i = 0; i < 4; ++i)
+        {
+            out_corners[i * 2] = corners[i].x;
+            out_corners[i * 2 + 1] = corners[i].y;
+        }
+
+        return true;
+    }
+
 } // extern "C"

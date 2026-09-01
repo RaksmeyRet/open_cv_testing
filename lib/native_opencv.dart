@@ -42,6 +42,24 @@ typedef CropIdCardDart =
       Pointer<Uint8> outputPixels,
     );
 
+// ---------------------------------------------------------------------------
+// detect_id_card_corners
+// ---------------------------------------------------------------------------
+typedef DetectCornersC =
+    Bool Function(
+      Pointer<Uint8> inputPixels,
+      Int32 width,
+      Int32 height,
+      Pointer<Float> outCorners,
+    );
+typedef DetectCornersDart =
+    bool Function(
+      Pointer<Uint8> inputPixels,
+      int width,
+      int height,
+      Pointer<Float> outCorners,
+    );
+
 class NativeOpencv {
   static final DynamicLibrary _lib = _loadNativeLib();
 
@@ -65,6 +83,11 @@ class NativeOpencv {
 
   static final CropIdCardDart _cropIdCard =
       _lib.lookup<NativeFunction<CropIdCardC>>('crop_id_card').asFunction();
+
+  static final DetectCornersDart _detectCorners =
+      _lib
+          .lookup<NativeFunction<DetectCornersC>>('detect_id_card_corners')
+          .asFunction();
 
   // -------------------------------------------------------------------
   // Public API
@@ -121,6 +144,42 @@ class NativeOpencv {
     } finally {
       malloc.free(inputPointer);
       malloc.free(outputPointer);
+    }
+  }
+
+  /// [rgbaBytes] is the source frame's RGBA buffer (any width/height).
+  /// Returns the 4 detected card corners in pixel coordinates, ordered
+  /// TL, TR, BR, BL, or null if no card was detected.
+  static List<Offset>? detectIdCardCorners(
+    Uint8List rgbaBytes,
+    int width,
+    int height,
+  ) {
+    final Pointer<Uint8> inputPointer = malloc<Uint8>(rgbaBytes.length);
+    final Pointer<Float> cornersPointer = malloc<Float>(8);
+
+    try {
+      inputPointer.asTypedList(rgbaBytes.length).setAll(0, rgbaBytes);
+
+      final bool success = _detectCorners(
+        inputPointer,
+        width,
+        height,
+        cornersPointer,
+      );
+
+      if (!success) {
+        return null;
+      }
+
+      final values = cornersPointer.asTypedList(8);
+      return List<Offset>.generate(
+        4,
+        (i) => Offset(values[i * 2], values[i * 2 + 1]),
+      );
+    } finally {
+      malloc.free(inputPointer);
+      malloc.free(cornersPointer);
     }
   }
 }

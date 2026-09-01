@@ -23,7 +23,28 @@ public:
         cv::Mat& processedImage
     ) const;
 
+    /**
+     * Detects the four corners of an ID card in the given BGR image without
+     * cropping/binarizing it. Corners are returned in the original image's
+     * pixel coordinate space, ordered TL, TR, BR, BL.
+     *
+     * @return true if a card-like quadrilateral was found.
+     */
+    bool detectCorners(
+        const cv::Mat& image,
+        std::vector<cv::Point2f>& corners
+    ) const;
+
 private:
+    /**
+     * Finds the best card-like quadrilateral in an already-resized BGR image.
+     * Returned corners are in the resized image's pixel coordinate space.
+     */
+    bool findCorners(
+        const cv::Mat& resizedImage,
+        std::vector<cv::Point2f>& corners
+    ) const;
+
     /**
      * Sorts the four corner points into:
      * 0 = Top Left

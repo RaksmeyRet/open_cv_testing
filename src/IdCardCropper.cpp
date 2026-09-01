@@ -44,6 +44,73 @@ bool IdCardCropper::autoCropAndBinarize(
         resized,
         cv::Size(1000, static_cast<int>(image.rows * scale)));
 
+    std::vector<cv::Point2f> sourceCorners;
+    if (!findCorners(resized, sourceCorners))
+    {
+        return false;
+    }
+
+    const std::vector<cv::Point2f>
+        destinationCorners = {
+            cv::Point2f(0.0F, 0.0F),
+            cv::Point2f(999.0F, 0.0F),
+            cv::Point2f(999.0F, 629.0F),
+            cv::Point2f(0.0F, 629.0F)};
+
+    const cv::Mat transform =
+        cv::getPerspectiveTransform(
+            sourceCorners,
+            destinationCorners);
+
+    cv::Mat cropped;
+
+    cv::warpPerspective(
+        resized,
+        cropped,
+        transform,
+        cv::Size(1000, 630));
+
+    binarize(cropped, processedImage);
+    return processedImage.cols == 1000 && processedImage.rows == 630;
+}
+
+bool IdCardCropper::detectCorners(
+    const cv::Mat &image,
+    std::vector<cv::Point2f> &corners) const
+{
+    if (image.empty())
+    {
+        return false;
+    }
+
+    cv::Mat resized;
+    const double scale = 1000.0 / image.cols;
+    cv::resize(
+        image,
+        resized,
+        cv::Size(1000, static_cast<int>(image.rows * scale)));
+
+    std::vector<cv::Point2f> resizedCorners;
+    if (!findCorners(resized, resizedCorners))
+    {
+        return false;
+    }
+
+    corners.resize(4);
+    for (int i = 0; i < 4; ++i)
+    {
+        corners[i] = cv::Point2f(
+            static_cast<float>(resizedCorners[i].x / scale),
+            static_cast<float>(resizedCorners[i].y / scale));
+    }
+
+    return true;
+}
+
+bool IdCardCropper::findCorners(
+    const cv::Mat &resized,
+    std::vector<cv::Point2f> &corners) const
+{
     cv::Mat gray;
     cv::Mat enhanced;
     cv::Mat blurred;
@@ -96,7 +163,6 @@ bool IdCardCropper::autoCropAndBinarize(
         cv::RETR_LIST,
         cv::CHAIN_APPROX_SIMPLE);
 
-    std::vector<cv::Point2f> sourceCorners;
     double bestScore = 0.0;
 
     const double imageArea =
@@ -156,38 +222,12 @@ bool IdCardCropper::autoCropAndBinarize(
         if (score > bestScore)
         {
             bestScore = score;
-            sourceCorners =
+            corners =
                 sortCorners(candidateCorners);
         }
     }
 
-    if (sourceCorners.empty())
-    {
-        return false;
-    }
-
-    const std::vector<cv::Point2f>
-        destinationCorners = {
-            cv::Point2f(0.0F, 0.0F),
-            cv::Point2f(999.0F, 0.0F),
-            cv::Point2f(999.0F, 629.0F),
-            cv::Point2f(0.0F, 629.0F)};
-
-    const cv::Mat transform =
-        cv::getPerspectiveTransform(
-            sourceCorners,
-            destinationCorners);
-
-    cv::Mat cropped;
-
-    cv::warpPerspective(
-        resized,
-        cropped,
-        transform,
-        cv::Size(1000, 630));
-
-    binarize(cropped, processedImage);
-    return processedImage.cols == 1000 && processedImage.rows == 630;
+    return !corners.empty();
 }
 
 std::vector<cv::Point2f> IdCardCropper::sortCorners(

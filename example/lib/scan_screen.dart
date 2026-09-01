@@ -510,12 +510,13 @@ class _ScanScreenState extends State<ScanScreen> {
                   Center(child: CameraPreview(controller)),
                   IgnorePointer(
                     child: Center(
-                      child: Container(
-                        margin: const EdgeInsets.symmetric(horizontal: 28),
-                        height: 220,
-                        decoration: BoxDecoration(
-                          border: Border.all(color: Colors.white, width: 2),
-                          borderRadius: BorderRadius.circular(16),
+                      child: FractionallySizedBox(
+                        widthFactor: 0.84,
+                        child: AspectRatio(
+                          aspectRatio: 1.586,
+                          child: CustomPaint(
+                            painter: _IdCardCornerGuidePainter(),
+                          ),
                         ),
                       ),
                     ),
@@ -696,4 +697,39 @@ class _ScanScreenState extends State<ScanScreen> {
       ],
     );
   }
+}
+
+class _IdCardCornerGuidePainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    const cornerLength = 32.0;
+    const strokeWidth = 4.0;
+    final inset = strokeWidth / 2;
+    final paint =
+        Paint()
+          ..color = Colors.white
+          ..strokeWidth = strokeWidth
+          ..strokeCap = StrokeCap.round
+          ..style = PaintingStyle.stroke;
+
+    final path =
+        Path()
+          ..moveTo(inset, cornerLength)
+          ..lineTo(inset, inset)
+          ..lineTo(cornerLength, inset)
+          ..moveTo(size.width - cornerLength, inset)
+          ..lineTo(size.width - inset, inset)
+          ..lineTo(size.width - inset, cornerLength)
+          ..moveTo(size.width - inset, size.height - cornerLength)
+          ..lineTo(size.width - inset, size.height - inset)
+          ..lineTo(size.width - cornerLength, size.height - inset)
+          ..moveTo(cornerLength, size.height - inset)
+          ..lineTo(inset, size.height - inset)
+          ..lineTo(inset, size.height - cornerLength);
+
+    canvas.drawPath(path, paint);
+  }
+
+  @override
+  bool shouldRepaint(covariant _IdCardCornerGuidePainter oldDelegate) => false;
 }
