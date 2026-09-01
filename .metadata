@@ -4,15 +4,23 @@
 # This file should be version controlled and should not be manually edited.
 
 version:
+<<<<<<< HEAD
   revision: "ea121f8859e4b13e47a8f845e4586164519588bc"
   channel: "stable"
 
 project_type: plugin
+=======
+  revision: "f6ff1529fd6d8af5f706051d9251ac9231c83407"
+  channel: "stable"
+
+project_type: app
+>>>>>>> a6a6150 (update)
 
 # Tracks metadata for the flutter migrate command
 migration:
   platforms:
     - platform: root
+<<<<<<< HEAD
       create_revision: ea121f8859e4b13e47a8f845e4586164519588bc
       base_revision: ea121f8859e4b13e47a8f845e4586164519588bc
     - platform: android
@@ -21,6 +29,28 @@ migration:
     - platform: ios
       create_revision: ea121f8859e4b13e47a8f845e4586164519588bc
       base_revision: ea121f8859e4b13e47a8f845e4586164519588bc
+=======
+      create_revision: f6ff1529fd6d8af5f706051d9251ac9231c83407
+      base_revision: f6ff1529fd6d8af5f706051d9251ac9231c83407
+    - platform: android
+      create_revision: f6ff1529fd6d8af5f706051d9251ac9231c83407
+      base_revision: f6ff1529fd6d8af5f706051d9251ac9231c83407
+    - platform: ios
+      create_revision: f6ff1529fd6d8af5f706051d9251ac9231c83407
+      base_revision: f6ff1529fd6d8af5f706051d9251ac9231c83407
+    - platform: linux
+      create_revision: f6ff1529fd6d8af5f706051d9251ac9231c83407
+      base_revision: f6ff1529fd6d8af5f706051d9251ac9231c83407
+    - platform: macos
+      create_revision: f6ff1529fd6d8af5f706051d9251ac9231c83407
+      base_revision: f6ff1529fd6d8af5f706051d9251ac9231c83407
+    - platform: web
+      create_revision: f6ff1529fd6d8af5f706051d9251ac9231c83407
+      base_revision: f6ff1529fd6d8af5f706051d9251ac9231c83407
+    - platform: windows
+      create_revision: f6ff1529fd6d8af5f706051d9251ac9231c83407
+      base_revision: f6ff1529fd6d8af5f706051d9251ac9231c83407
+>>>>>>> a6a6150 (update)
 
   # User provided section
 
