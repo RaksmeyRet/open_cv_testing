@@ -51,8 +51,15 @@ class _ScanScreenState extends State<ScanScreen> {
   @override
   void initState() {
     super.initState();
+    for (final controller in _controllers) {
+      controller.addListener(_updateFieldValidation);
+    }
     _showCamera = true;
     _openCamera();
+  }
+
+  void _updateFieldValidation() {
+    if (mounted) setState(() {});
   }
 
   Future<void> _openCamera() async {
@@ -267,7 +274,7 @@ class _ScanScreenState extends State<ScanScreen> {
         ].whereType<String>().join('\n').toUpperCase();
     if (rawText.isEmpty) return;
 
-    final idMatch = RegExp(r'IDKHM([0-9]{8,})').firstMatch(rawText);
+    final idMatch = RegExp(r'IDKHM([0-9]{9})[0-9]').firstMatch(rawText);
     if (_fieldValue(fields, 0).isEmpty && idMatch != null) {
       fields['idnumber'] = idMatch.group(1)!;
     }
@@ -288,7 +295,7 @@ class _ScanScreenState extends State<ScanScreen> {
       if (child is String) {
         final normalized = child.toUpperCase().replaceAll(' ', '');
         final match = RegExp(
-          r'IDKHM[^0-9O]{0,4}([0-9O]{8,12})',
+          r'IDKHM[^0-9O]{0,4}([0-9O]{9})[0-9O]',
         ).firstMatch(normalized);
         if (match != null) {
           found = match.group(1)!.replaceAll('O', '0');
@@ -352,6 +359,7 @@ class _ScanScreenState extends State<ScanScreen> {
       value.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '');
 
   void _confirm() {
+    if (!_isFormValid) return;
     final result = <String, String>{};
     for (var index = 0; index < _fieldLabels.length; index++) {
       result[_fieldLabels[index]] = _controllers[index].text.trim();
@@ -645,7 +653,7 @@ class _ScanScreenState extends State<ScanScreen> {
               width: double.infinity,
               height: 52,
               child: FilledButton.icon(
-                onPressed: _confirm,
+                onPressed: _isFormValid && !_isPicking ? _confirm : null,
                 icon: const Icon(Icons.check),
                 label: const Text('Save details'),
               ),
@@ -675,9 +683,16 @@ class _ScanScreenState extends State<ScanScreen> {
           style: TextStyle(fontSize: 19, fontWeight: FontWeight.w700),
         ),
         const SizedBox(height: 12),
-        ...List.generate(
-          _fieldLabels.length,
-          (index) => Padding(
+        ...List.generate(_fieldLabels.length, (index) {
+          final error = _validationError(index, _controllers[index].text);
+          final isValid = error == null;
+          final borderColor =
+              isValid ? const Color(0xff169c57) : const Color(0xffd92d20);
+          final border = OutlineInputBorder(
+            borderRadius: BorderRadius.circular(8),
+            borderSide: BorderSide(color: borderColor, width: 1.5),
+          );
+          return Padding(
             padding: const EdgeInsets.only(bottom: 12),
             child: TextField(
               controller: _controllers[index],
@@ -685,17 +700,75 @@ class _ScanScreenState extends State<ScanScreen> {
                   index == _fieldLabels.length - 1
                       ? TextInputAction.done
                       : TextInputAction.next,
+              keyboardType:
+                  index == 0 || index == 2 || index == 3
+                      ? TextInputType.text
+                      : TextInputType.name,
               decoration: InputDecoration(
                 labelText: _fieldLabels[index],
-                border: const OutlineInputBorder(),
+                errorText: error,
+                errorMaxLines: 2,
+                suffixIcon: Icon(
+                  isValid ? Icons.check_circle : Icons.error_outline,
+                  color: borderColor,
+                ),
+                enabledBorder: border,
+                focusedBorder: border.copyWith(
+                  borderSide: BorderSide(color: borderColor, width: 2),
+                ),
+                errorBorder: border,
+                focusedErrorBorder: border.copyWith(
+                  borderSide: BorderSide(color: borderColor, width: 2),
+                ),
                 filled: true,
                 fillColor: Colors.white,
               ),
             ),
-          ),
-        ),
+          );
+        }),
       ],
     );
+  }
+
+  bool get _isFormValid => List.generate(
+    _controllers.length,
+    (index) => _validationError(index, _controllers[index].text) == null,
+  ).every((isValid) => isValid);
+
+  String? _validationError(int index, String value) {
+    final text = value.trim();
+    switch (index) {
+      case 0:
+        return RegExp(r'^\d{9}$').hasMatch(text)
+            ? null
+            : 'Enter the 9-digit ID number.';
+      case 1:
+        return text.length >= 2 && RegExp(r'[^\d]').hasMatch(text)
+            ? null
+            : 'Enter the card holder name.';
+      case 2:
+      case 3:
+        return _isValidDate(text)
+            ? null
+            : 'Enter a valid date in YYYY-MM-DD format.';
+      case 4:
+        return const {'male', 'female', 'm', 'f'}.contains(text.toLowerCase())
+            ? null
+            : 'Enter Male, Female, M, or F.';
+      default:
+        return null;
+    }
+  }
+
+  bool _isValidDate(String value) {
+    final match = RegExp(r'^(\d{4})-(\d{2})-(\d{2})$').firstMatch(value);
+    if (match == null) return false;
+    final year = int.parse(match.group(1)!);
+    final month = int.parse(match.group(2)!);
+    final day = int.parse(match.group(3)!);
+    if (month < 1 || month > 12 || day < 1) return false;
+    final parsed = DateTime(year, month, day);
+    return parsed.year == year && parsed.month == month && parsed.day == day;
   }
 }
 
