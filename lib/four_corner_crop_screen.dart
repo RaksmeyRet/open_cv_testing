@@ -8,13 +8,6 @@ import 'package:image/image.dart' as img;
 import 'package:native_opencv_kit/native_opencv.dart';
 import 'package:path_provider/path_provider.dart';
 
-const List<Offset> _defaultCorners = [
-  Offset(.08, .12),
-  Offset(.92, .12),
-  Offset(.92, .88),
-  Offset(.08, .88),
-];
-
 /// Runs native corner detection on a decoded image. Must run off the UI
 /// isolate since native_opencv_kit's FFI call does CPU-heavy OpenCV work.
 /// Only primitive/TypedData values are passed since `compute` serializes
@@ -25,9 +18,7 @@ List<double>? _detectCornersInBackground(Map<String, dynamic> input) {
   final height = input['height'] as int;
   final corners = NativeOpencv.detectIdCardCorners(rgba, width, height);
   if (corners == null) return null;
-  return corners
-      .expand((corner) => <double>[corner.dx, corner.dy])
-      .toList();
+  return corners.expand((corner) => <double>[corner.dx, corner.dy]).toList();
 }
 
 Future<Uint8List> _cropImageInBackground(Map<String, dynamic> input) async {
@@ -102,6 +93,8 @@ class _FourCornerCropScreenState extends State<FourCornerCropScreen> {
   bool _isDetecting = false;
   String? _error;
 
+  static const _idCardAspectRatio = 1.586;
+
   @override
   void initState() {
     super.initState();
@@ -117,7 +110,7 @@ class _FourCornerCropScreenState extends State<FourCornerCropScreen> {
       setState(() {
         _sourceBytes = bytes;
         _decodedImage = image;
-        _corners = List.of(_defaultCorners);
+        _isDetecting = true;
       });
       unawaited(_autoDetectCorners(image));
     } catch (error) {
@@ -126,27 +119,42 @@ class _FourCornerCropScreenState extends State<FourCornerCropScreen> {
   }
 
   Future<void> _autoDetectCorners(img.Image image) async {
-    setState(() => _isDetecting = true);
     try {
       final values = await compute(_detectCornersInBackground, {
         'rgba': image.getBytes(order: img.ChannelOrder.rgba),
         'width': image.width,
         'height': image.height,
       });
-      if (!mounted || values == null) return;
+      if (!mounted) return;
       setState(() {
-        _corners = [
-          Offset(values[0] / image.width, values[1] / image.height),
-          Offset(values[2] / image.width, values[3] / image.height),
-          Offset(values[4] / image.width, values[5] / image.height),
-          Offset(values[6] / image.width, values[7] / image.height),
-        ];
+        _corners =
+            values == null
+                ? _fallbackCorners(image)
+                : [
+                  Offset(values[0] / image.width, values[1] / image.height),
+                  Offset(values[2] / image.width, values[3] / image.height),
+                  Offset(values[4] / image.width, values[5] / image.height),
+                  Offset(values[6] / image.width, values[7] / image.height),
+                ];
       });
     } catch (error) {
       debugPrint('Auto-detect corners failed: $error');
     } finally {
       if (mounted) setState(() => _isDetecting = false);
     }
+  }
+
+  List<Offset> _fallbackCorners(img.Image image) {
+    const horizontalPadding = .08;
+    final width = 1 - (horizontalPadding * 2);
+    final height = width * image.width / image.height / _idCardAspectRatio;
+    final top = ((1 - height) / 2).clamp(.02, .98 - height);
+    return [
+      Offset(horizontalPadding, top),
+      Offset(1 - horizontalPadding, top),
+      Offset(1 - horizontalPadding, top + height),
+      Offset(horizontalPadding, top + height),
+    ];
   }
 
   Future<void> _apply() async {
@@ -221,7 +229,7 @@ class _FourCornerCropScreenState extends State<FourCornerCropScreen> {
                   style: const TextStyle(color: Colors.black87),
                 ),
               )
-              : image == null || corners == null
+              : image == null || _isDetecting || corners == null
               ? const Center(child: CircularProgressIndicator())
               : Column(
                 children: [
@@ -289,24 +297,10 @@ class _FourCornerCropScreenState extends State<FourCornerCropScreen> {
                             child: OutlinedButton.icon(
                               onPressed:
                                   () => setState(
-                                    () => _corners = List.of(_defaultCorners),
+                                    () => _corners = _fallbackCorners(image),
                                   ),
                               icon: const Icon(Icons.refresh),
                               label: const Text('Reset corners'),
-                              style: OutlinedButton.styleFrom(
-                                foregroundColor: Colors.black87,
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: OutlinedButton.icon(
-                              onPressed:
-                                  _isDetecting
-                                      ? null
-                                      : () => _autoDetectCorners(image),
-                              icon: const Icon(Icons.center_focus_strong),
-                              label: const Text('Auto detect'),
                               style: OutlinedButton.styleFrom(
                                 foregroundColor: Colors.black87,
                               ),
