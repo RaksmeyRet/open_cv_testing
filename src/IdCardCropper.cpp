@@ -130,7 +130,7 @@ bool IdCardCropper::findCorners(
         cv::Size(5, 5),
         0);
 
-    cv::bilateralFilter(blurred, blurred, 9, 75, 75);
+    cv::bilateralFilter(blurred.clone(), blurred, 9, 75, 75);
 
     const double median = medianIntensity(blurred);
     const double lowerThreshold = std::max(0.0, 0.66 * median);
@@ -140,14 +140,14 @@ bool IdCardCropper::findCorners(
     const cv::Mat closingKernel =
         cv::getStructuringElement(
             cv::MORPH_RECT,
-                cv::Size(5, 5));
+            cv::Size(3, 3));
 
-            cv::dilate(
-                edged,
-                edged,
-                closingKernel,
-                cv::Point(-1, -1),
-                2);
+    cv::dilate(
+        edged,
+        edged,
+        closingKernel,
+        cv::Point(-1, -1),
+        1);
 
     cv::morphologyEx(
         edged,
@@ -214,10 +214,26 @@ bool IdCardCropper::findCorners(
             continue;
         }
 
-        const double aspectRatio = std::max(width, height) / std::min(width, height);
-        const double score = 1.0 - std::min(
+        const double aspectRatio =
+            std::max(width, height) / std::min(width, height);
+        const double aspectScore = 1.0 - std::min(
             std::abs(aspectRatio - cardAspectRatio_) / cardAspectRatio_,
             1.0);
+
+        const double rectangleArea = width * height;
+        const double rectangularity = std::min(
+            area / rectangleArea,
+            1.0);
+        if (rectangularity < 0.60 || aspectScore < 0.75)
+        {
+            continue;
+        }
+
+        const double areaScore = std::min(areaFraction / 0.20, 1.0);
+        const double score =
+            (0.55 * aspectScore) +
+            (0.30 * rectangularity) +
+            (0.15 * areaScore);
 
         if (score > bestScore)
         {
@@ -227,7 +243,7 @@ bool IdCardCropper::findCorners(
         }
     }
 
-    return !corners.empty();
+    return !corners.empty() && bestScore >= 0.75;
 }
 
 std::vector<cv::Point2f> IdCardCropper::sortCorners(

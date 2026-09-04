@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import 'package:flutter/services.dart';
 import 'package:native_opencv_kit/native_opencv.dart';
+import 'package:native_opencv_kit_example/model/scan_result_model.dart';
 import 'package:native_opencv_kit_example/scan_screen.dart';
 
 void main() {
@@ -17,7 +18,7 @@ class MyApp extends StatefulWidget {
 
 class _MyAppState extends State<MyApp> {
   String _platformVersion = 'Unknown';
-  Map<String, String>? _scanResult;
+  ScanResultModel? _scanResult;
 
   @override
   void initState() {
@@ -119,7 +120,9 @@ class _MyAppState extends State<MyApp> {
                           MaterialPageRoute(builder: (_) => const ScanScreen()),
                         );
                         if (!context.mounted || result == null) return;
-                        setState(() => _scanResult = result);
+                        setState(
+                          () => _scanResult = ScanResultModel.fromJson(result),
+                        );
                       },
                     ),
                     if (_scanResult != null) ...[
@@ -138,7 +141,7 @@ class _MyAppState extends State<MyApp> {
                                 ),
                               ),
                               const SizedBox(height: 12),
-                              ..._scanResult!.entries.map(
+                              ..._scanResult!.toDisplayMap().entries.map(
                                 (entry) => Padding(
                                   padding: const EdgeInsets.only(bottom: 8),
                                   child: Row(

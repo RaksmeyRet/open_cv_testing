@@ -8,6 +8,8 @@ import 'package:image/image.dart' as img;
 import 'package:native_opencv_kit/native_opencv.dart';
 import 'package:path_provider/path_provider.dart';
 
+import 'core/colors/app_colors.dart';
+
 /// Runs native corner detection on a decoded image. Must run off the UI
 /// isolate since native_opencv_kit's FFI call does CPU-heavy OpenCV work.
 /// Only primitive/TypedData values are passed since `compute` serializes
@@ -16,9 +18,18 @@ List<double>? _detectCornersInBackground(Map<String, dynamic> input) {
   final rgba = input['rgba'] as Uint8List;
   final width = input['width'] as int;
   final height = input['height'] as int;
+  final originalWidth = input['originalWidth'] as int;
+  final originalHeight = input['originalHeight'] as int;
   final corners = NativeOpencv.detectIdCardCorners(rgba, width, height);
   if (corners == null) return null;
-  return corners.expand((corner) => <double>[corner.dx, corner.dy]).toList();
+  return corners
+      .expand(
+        (corner) => <double>[
+          corner.dx / originalWidth,
+          corner.dy / originalHeight,
+        ],
+      )
+      .toList();
 }
 
 Future<Uint8List> _cropImageInBackground(Map<String, dynamic> input) async {
@@ -110,7 +121,7 @@ class _FourCornerCropScreenState extends State<FourCornerCropScreen> {
       setState(() {
         _sourceBytes = bytes;
         _decodedImage = image;
-        _isDetecting = true;
+        _corners = _fallbackCorners(image);
       });
       unawaited(_autoDetectCorners(image));
     } catch (error) {
@@ -120,23 +131,29 @@ class _FourCornerCropScreenState extends State<FourCornerCropScreen> {
 
   Future<void> _autoDetectCorners(img.Image image) async {
     try {
+      const detectionWidth = 960;
+      final detectionImage =
+          image.width > detectionWidth
+              ? img.copyResize(image, width: detectionWidth)
+              : image;
       final values = await compute(_detectCornersInBackground, {
-        'rgba': image.getBytes(order: img.ChannelOrder.rgba),
-        'width': image.width,
-        'height': image.height,
+        'rgba': detectionImage.getBytes(order: img.ChannelOrder.rgba),
+        'width': detectionImage.width,
+        'height': detectionImage.height,
+        'originalWidth': detectionImage.width,
+        'originalHeight': detectionImage.height,
       });
       if (!mounted) return;
-      setState(() {
-        _corners =
-            values == null
-                ? _fallbackCorners(image)
-                : [
-                  Offset(values[0] / image.width, values[1] / image.height),
-                  Offset(values[2] / image.width, values[3] / image.height),
-                  Offset(values[4] / image.width, values[5] / image.height),
-                  Offset(values[6] / image.width, values[7] / image.height),
-                ];
-      });
+      if (values == null) return;
+      setState(
+        () =>
+            _corners = [
+              Offset(values[0], values[1]),
+              Offset(values[2], values[3]),
+              Offset(values[4], values[5]),
+              Offset(values[6], values[7]),
+            ],
+      );
     } catch (error) {
       debugPrint('Auto-detect corners failed: $error');
     } finally {
@@ -179,12 +196,7 @@ class _FourCornerCropScreenState extends State<FourCornerCropScreen> {
       );
       await file.writeAsBytes(encoded, flush: true);
       if (!mounted) return;
-      final proceed = await Navigator.of(context).push<bool>(
-        MaterialPageRoute(
-          builder: (_) => CroppedImagePreviewScreen(image: file),
-        ),
-      );
-      if (mounted && proceed == true) Navigator.of(context).pop(file);
+      Navigator.of(context).pop(file);
     } catch (error) {
       if (mounted) setState(() => _error = 'Could not crop image: $error');
     } finally {
@@ -211,15 +223,13 @@ class _FourCornerCropScreenState extends State<FourCornerCropScreen> {
     return Scaffold(
       backgroundColor: Colors.white,
       appBar: AppBar(
-        title: const Text('Adjust ID card corners'),
+        title: const Text(
+          'តម្រឹមរូបថតអត្តសញ្ញាណប័ណ្ណ',
+          style: TextStyle(fontWeight: FontWeight.w700),
+        ),
         backgroundColor: Colors.white,
-        foregroundColor: Colors.black87,
-        actions: [
-          TextButton(
-            onPressed: corners == null || _isApplying ? null : _apply,
-            child: Text(_isApplying ? 'CROPPING...' : 'APPLY'),
-          ),
-        ],
+        foregroundColor: AppColors.textPrimary,
+        centerTitle: true,
       ),
       body:
           _error != null
@@ -237,52 +247,65 @@ class _FourCornerCropScreenState extends State<FourCornerCropScreen> {
                     padding: const EdgeInsets.fromLTRB(20, 14, 20, 12),
                     child: Text(
                       _isDetecting
-                          ? 'Detecting card edges...'
-                          : 'Drag each corner onto the edge of the card',
+                          ? 'កំពុងស្វែងរកគែមកាត...'
+                          : 'ទាញជ្រុងនីមួយៗឲ្យចំគែមកាត',
                       style: const TextStyle(color: Colors.black54),
                     ),
                   ),
                   Expanded(
                     child: LayoutBuilder(
                       builder: (context, constraints) {
-                        final size = Size(
-                          constraints.maxWidth,
-                          constraints.maxHeight,
+                        final scale = math.min(
+                          constraints.maxWidth / image.width,
+                          constraints.maxHeight / image.height,
                         );
-                        return GestureDetector(
-                          onPanStart: (details) {
-                            var nearest = 0;
-                            var distance = double.infinity;
-                            for (
-                              var index = 0;
-                              index < corners.length;
-                              index++
-                            ) {
-                              final point = Offset(
-                                corners[index].dx * size.width,
-                                corners[index].dy * size.height,
-                              );
-                              final currentDistance =
-                                  (point - details.localPosition).distance;
-                              if (currentDistance < distance) {
-                                nearest = index;
-                                distance = currentDistance;
-                              }
-                            }
-                            if (distance < 70) {
-                              setState(() => _activeCorner = nearest);
-                            }
-                          },
-                          onPanUpdate:
-                              (details) =>
-                                  _updateCorner(details.localPosition, size),
-                          onPanEnd: (_) => setState(() => _activeCorner = null),
-                          child: Stack(
-                            fit: StackFit.expand,
-                            children: [
-                              Image.file(widget.source, fit: BoxFit.fill),
-                              CustomPaint(painter: _CropPainter(corners)),
-                            ],
+                        final previewSize = Size(
+                          image.width * scale,
+                          image.height * scale,
+                        );
+                        return Center(
+                          child: SizedBox(
+                            width: previewSize.width,
+                            height: previewSize.height,
+                            child: GestureDetector(
+                              onPanStart: (details) {
+                                var nearest = 0;
+                                var distance = double.infinity;
+                                for (
+                                  var index = 0;
+                                  index < corners.length;
+                                  index++
+                                ) {
+                                  final point = Offset(
+                                    corners[index].dx * previewSize.width,
+                                    corners[index].dy * previewSize.height,
+                                  );
+                                  final currentDistance =
+                                      (point - details.localPosition).distance;
+                                  if (currentDistance < distance) {
+                                    nearest = index;
+                                    distance = currentDistance;
+                                  }
+                                }
+                                if (distance < 70) {
+                                  setState(() => _activeCorner = nearest);
+                                }
+                              },
+                              onPanUpdate:
+                                  (details) => _updateCorner(
+                                    details.localPosition,
+                                    previewSize,
+                                  ),
+                              onPanEnd:
+                                  (_) => setState(() => _activeCorner = null),
+                              child: Stack(
+                                fit: StackFit.expand,
+                                children: [
+                                  Image.file(widget.source, fit: BoxFit.fill),
+                                  CustomPaint(painter: _CropPainter(corners)),
+                                ],
+                              ),
+                            ),
                           ),
                         );
                       },
@@ -290,21 +313,63 @@ class _FourCornerCropScreenState extends State<FourCornerCropScreen> {
                   ),
                   SafeArea(
                     child: Padding(
-                      padding: const EdgeInsets.all(16),
-                      child: Row(
+                      padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+                      child: Column(
                         children: [
-                          Expanded(
-                            child: OutlinedButton.icon(
+                          Align(
+                            alignment: Alignment.centerRight,
+                            child: TextButton.icon(
                               onPressed:
                                   () => setState(
                                     () => _corners = _fallbackCorners(image),
                                   ),
-                              icon: const Icon(Icons.refresh),
-                              label: const Text('Reset corners'),
-                              style: OutlinedButton.styleFrom(
-                                foregroundColor: Colors.black87,
+                              icon: const Icon(Icons.refresh, size: 18),
+                              label: const Text('កំណត់ជ្រុងឡើងវិញ'),
+                              style: TextButton.styleFrom(
+                                foregroundColor: AppColors.textSecondary,
                               ),
                             ),
+                          ),
+                          const SizedBox(height: 4),
+                          Row(
+                            children: [
+                              Expanded(
+                                child: OutlinedButton(
+                                  onPressed: () => Navigator.of(context).pop(),
+                                  style: OutlinedButton.styleFrom(
+                                    foregroundColor: AppColors.textPrimary,
+                                    side: const BorderSide(
+                                      color: AppColors.border,
+                                    ),
+                                    padding: const EdgeInsets.symmetric(
+                                      vertical: 16,
+                                    ),
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(12),
+                                    ),
+                                  ),
+                                  child: const Text('ថតរូបឡើងវិញ'),
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: FilledButton(
+                                  onPressed: _isApplying ? null : _apply,
+                                  style: FilledButton.styleFrom(
+                                    backgroundColor: AppColors.primaryDark,
+                                    padding: const EdgeInsets.symmetric(
+                                      vertical: 16,
+                                    ),
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(12),
+                                    ),
+                                  ),
+                                  child: Text(
+                                    _isApplying ? 'កំពុងច្រិប...' : 'បន្ទាប់',
+                                  ),
+                                ),
+                              ),
+                            ],
                           ),
                         ],
                       ),
@@ -312,48 +377,6 @@ class _FourCornerCropScreenState extends State<FourCornerCropScreen> {
                   ),
                 ],
               ),
-    );
-  }
-}
-
-class CroppedImagePreviewScreen extends StatelessWidget {
-  const CroppedImagePreviewScreen({required this.image, super.key});
-
-  final File image;
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.white,
-      appBar: AppBar(
-        title: const Text('Cropped ID card'),
-        backgroundColor: Colors.white,
-        foregroundColor: Colors.black87,
-      ),
-      body: SafeArea(
-        child: Column(
-          children: [
-            Expanded(
-              child: Padding(
-                padding: const EdgeInsets.all(20),
-                child: Center(child: Image.file(image, fit: BoxFit.contain)),
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(20, 8, 20, 20),
-              child: SizedBox(
-                width: double.infinity,
-                height: 54,
-                child: FilledButton.icon(
-                  onPressed: () => Navigator.of(context).pop(true),
-                  icon: const Icon(Icons.arrow_forward),
-                  label: const Text('NEXT'),
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
     );
   }
 }
