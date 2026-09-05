@@ -3,12 +3,14 @@ import 'dart:io';
 
 import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
+import 'package:get/get.dart';
 import 'package:http/http.dart' as http;
 
-import 'core/colors/app_colors.dart';
-import 'four_corner_crop_screen.dart';
-import 'photo_library_screen.dart';
-import 'scan_camera_widgets.dart';
+import '../../../../app/theme/app_colors.dart';
+import '../controllers/scan_controller.dart';
+import '../widgets/scan_camera.dart';
+import 'crop_page.dart';
+import 'photo_library_page.dart';
 
 class ScanScreen extends StatefulWidget {
   const ScanScreen({super.key});
@@ -17,7 +19,10 @@ class ScanScreen extends StatefulWidget {
   State<ScanScreen> createState() => _ScanScreenState();
 }
 
-class _ScanScreenState extends State<ScanScreen> {
+class _ScanScreenState extends State<ScanScreen>
+    with SingleTickerProviderStateMixin {
+  late final ScanController scanController = Get.find<ScanController>();
+
   final List<TextEditingController> _controllers = List.generate(
     5,
     (_) => TextEditingController(),
@@ -29,6 +34,7 @@ class _ScanScreenState extends State<ScanScreen> {
   bool _showCamera = false;
   CameraController? _cameraController;
   String? _errorMessage;
+  late final AnimationController _reloadController;
 
   static const String _ocrBaseUrl = 'http://157.245.49.153:8212';
 
@@ -50,6 +56,7 @@ class _ScanScreenState extends State<ScanScreen> {
 
   @override
   void dispose() {
+    _reloadController.dispose();
     _cameraController?.dispose();
     for (final controller in _controllers) {
       controller.dispose();
@@ -60,9 +67,14 @@ class _ScanScreenState extends State<ScanScreen> {
   @override
   void initState() {
     super.initState();
+    _reloadController = AnimationController(
+      vsync: this,
+      duration: const Duration(seconds: 1),
+    )..repeat();
     for (final controller in _controllers) {
       controller.addListener(_updateFieldValidation);
     }
+    scanController.showCamera.value = true;
     _showCamera = true;
     _openCamera();
   }
@@ -77,9 +89,12 @@ class _ScanScreenState extends State<ScanScreen> {
 
     try {
       final previousController = _cameraController;
+      scanController.isOpeningCamera.value = true;
       setState(() {
         _showCamera = true;
+        scanController.showCamera.value = true;
         _errorMessage = null;
+        scanController.errorMessage.value = null;
         _cameraController = null;
       });
       await previousController?.dispose();
@@ -109,6 +124,7 @@ class _ScanScreenState extends State<ScanScreen> {
       }
     } finally {
       _isOpeningCamera = false;
+      scanController.isOpeningCamera.value = false;
     }
   }
 
@@ -117,6 +133,7 @@ class _ScanScreenState extends State<ScanScreen> {
     if (controller == null || !controller.value.isInitialized || _isPicking) {
       return;
     }
+    scanController.isPicking.value = true;
     setState(() => _isPicking = true);
     try {
       final photo = await controller.takePicture();
@@ -142,6 +159,7 @@ class _ScanScreenState extends State<ScanScreen> {
         setState(() => _errorMessage = 'Could not take photo: $error');
       }
     } finally {
+      scanController.isPicking.value = false;
       if (mounted) setState(() => _isPicking = false);
     }
   }
@@ -171,6 +189,7 @@ class _ScanScreenState extends State<ScanScreen> {
     if (_showCamera) {
       final controller = _cameraController;
       _cameraController = null;
+      scanController.showCamera.value = false;
       if (mounted) setState(() => _showCamera = false);
       await controller?.dispose();
     }
@@ -186,10 +205,13 @@ class _ScanScreenState extends State<ScanScreen> {
       return;
     }
 
+    scanController.imagePath.value = croppedFile.path;
     setState(() {
       _frontImage = croppedFile;
       _errorMessage = null;
+      scanController.errorMessage.value = null;
       _showCamera = false;
+      scanController.showCamera.value = false;
     });
     await _runOcr(croppedFile);
   }
@@ -201,6 +223,8 @@ class _ScanScreenState extends State<ScanScreen> {
   }
 
   Future<bool> _runOcr(File imageFile) async {
+    scanController.isPicking.value = true;
+    scanController.errorMessage.value = null;
     setState(() {
       _isPicking = true;
       _errorMessage = null;
@@ -222,12 +246,13 @@ class _ScanScreenState extends State<ScanScreen> {
       final response = await http.Response.fromStream(streamedResponse);
 
       if (response.statusCode != 200) {
-        throw Exception('OCR failed (HTTP ${response.statusCode})');
+        throw Exception(
+          'OCR failed (HTTP ${response.statusCode}): ${response.body}',
+        );
       }
 
       final decoded = jsonDecode(response.body) as Map<String, dynamic>;
       final fields = _extractOcrFields(decoded);
-      if (fields.isEmpty) throw Exception('OCR response has no fields');
       _fillMissingMrzFields(fields, decoded);
 
       final mrzId = _findMrzId(decoded);
@@ -235,17 +260,42 @@ class _ScanScreenState extends State<ScanScreen> {
         fields['idnumber'] = mrzId;
       }
 
-      for (var index = 0; index < _fieldLabels.length; index++) {
-        _controllers[index].text = _fieldValue(fields, index);
+      final rawMrzId = _findRawMrzId(decoded['raw_text']);
+      if (_fieldValue(fields, 0).isEmpty && rawMrzId != null) {
+        fields['idnumber'] = rawMrzId;
+      }
+
+      final hasRecognizedValue = List.generate(
+        _fieldLabels.length,
+        (index) => _fieldValue(fields, index).isNotEmpty,
+      ).any((value) => value);
+      if (!hasRecognizedValue) {
+        throw Exception('OCR returned no recognizable ID-card fields');
+      }
+
+      final values = List.generate(
+        _fieldLabels.length,
+        (index) => _fieldValue(fields, index),
+      );
+      if (mounted) {
+        setState(() {
+          for (var index = 0; index < _controllers.length; index++) {
+            _controllers[index].text = values[index];
+          }
+        });
       }
       return true;
     } catch (error) {
       if (mounted) {
         setState(
-          () => _errorMessage = 'Could not read text from image: $error',
+          () =>
+              _errorMessage =
+                  'Could not connect to the OCR backend at $_ocrBaseUrl. '
+                  'Make this URL reachable from the phone, then try again.\n$error',
         );
       }
     } finally {
+      scanController.isPicking.value = false;
       if (mounted) setState(() => _isPicking = false);
     }
     return false;
@@ -275,7 +325,7 @@ class _ScanScreenState extends State<ScanScreen> {
       }
     }
 
-    visit(response['fields'] ?? response);
+    visit(response);
     return fields;
   }
 
@@ -292,14 +342,15 @@ class _ScanScreenState extends State<ScanScreen> {
         ].whereType<String>().join('\n').toUpperCase();
     if (rawText.isEmpty) return;
 
-    final idMatch = RegExp(r'IDKHM([0-9]{9})[0-9]').firstMatch(rawText);
+    final normalizedText = rawText.replaceAll(RegExp(r'[^A-Z0-9<]'), '');
+    final idMatch = RegExp(
+      r'(?:IDKHM|LDKHM|TDKHM)([0-9O]{9})[0-9O]',
+    ).firstMatch(normalizedText);
     if (_fieldValue(fields, 0).isEmpty && idMatch != null) {
-      fields['idnumber'] = idMatch.group(1)!;
+      fields['idnumber'] = idMatch.group(1)!.replaceAll('O', '0');
     }
 
-    final dateMatch = RegExp(
-      r'(?<![0-9])([0-9]{6})[0-9][MF]',
-    ).firstMatch(rawText);
+    final dateMatch = RegExp(r'([0-9]{6})[0-9][MF]').firstMatch(normalizedText);
     if (_fieldValue(fields, 2).isEmpty && dateMatch != null) {
       fields['dateofbirth'] = _formatMrzDate(dateMatch.group(1)!);
     }
@@ -333,6 +384,18 @@ class _ScanScreenState extends State<ScanScreen> {
 
     visit(value);
     return found;
+  }
+
+  String? _findRawMrzId(dynamic value) {
+    if (value is! String) return null;
+    for (final line in value.toUpperCase().split(RegExp(r'\r?\n'))) {
+      final compact = line.replaceAll(RegExp(r'[^0-9]'), '');
+      if (line.contains('<<') && compact.length >= 10) {
+        final lastTen = compact.substring(compact.length - 10);
+        return lastTen.substring(0, 9);
+      }
+    }
+    return null;
   }
 
   String _formatMrzDate(String value) {
@@ -387,16 +450,21 @@ class _ScanScreenState extends State<ScanScreen> {
 
   @override
   Widget build(BuildContext context) {
-    if (_showCamera) return _buildCameraState();
+    if (scanController.showCamera.value) return _buildCameraState();
     return Scaffold(
-      backgroundColor: AppColors.background,
+      backgroundColor: AppColors.whiteColor,
       appBar: AppBar(
+        leading: IconButton(
+          tooltip: 'ត្រឡប់ទៅកាមេរ៉ា',
+          onPressed: _isPicking ? null : _openCamera,
+          icon: const Icon(Icons.arrow_back_rounded),
+        ),
         title: const Text(
           'ផ្ទៀងផ្ទាត់អត្តសញ្ញាណប័ណ្ណ',
-          style: TextStyle(fontWeight: FontWeight.w700),
+          style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
         ),
         backgroundColor: Colors.transparent,
-        foregroundColor: AppColors.textPrimary,
+        foregroundColor: AppColors.primaryColor,
       ),
       body: SafeArea(
         child: _frontImage == null ? _buildEmptyState() : _buildImagePreview(),
@@ -410,7 +478,7 @@ class _ScanScreenState extends State<ScanScreen> {
         gradient: LinearGradient(
           begin: Alignment.topCenter,
           end: Alignment.bottomCenter,
-          colors: [Color(0xFFF7F9FF), Color(0xFFEFF3FF)],
+          colors: [AppColors.whiteColor, AppColors.strokeColor],
         ),
       ),
       child: SingleChildScrollView(
@@ -425,7 +493,7 @@ class _ScanScreenState extends State<ScanScreen> {
                   vertical: 8,
                 ),
                 decoration: BoxDecoration(
-                  color: AppColors.primaryLight,
+                  color: AppColors.secondaryColor,
                   borderRadius: BorderRadius.circular(999),
                 ),
                 child: Text(
@@ -433,7 +501,7 @@ class _ScanScreenState extends State<ScanScreen> {
                   style: TextStyle(
                     fontSize: 12,
                     fontWeight: FontWeight.w700,
-                    color: AppColors.primaryDark,
+                    color: AppColors.primaryColor,
                   ),
                 ),
               ),
@@ -443,7 +511,7 @@ class _ScanScreenState extends State<ScanScreen> {
                 style: TextStyle(
                   fontSize: 32,
                   fontWeight: FontWeight.w800,
-                  color: AppColors.textPrimary,
+                  color: AppColors.primaryColor,
                 ),
               ),
               const SizedBox(height: 8),
@@ -451,7 +519,7 @@ class _ScanScreenState extends State<ScanScreen> {
                 'Capture your ID card in a clean and secure way.',
                 style: TextStyle(
                   fontSize: 15,
-                  color: AppColors.textSecondary,
+                  color: AppColors.hintColor,
                   height: 1.5,
                 ),
               ),
@@ -460,9 +528,9 @@ class _ScanScreenState extends State<ScanScreen> {
                 width: double.infinity,
                 padding: const EdgeInsets.all(20),
                 decoration: BoxDecoration(
-                  color: AppColors.surface,
+                  color: AppColors.whiteColor,
                   borderRadius: BorderRadius.circular(26),
-                  border: Border.all(color: AppColors.border),
+                  border: Border.all(color: AppColors.strokeColor),
                   boxShadow: const [
                     BoxShadow(
                       color: Color(0x140F172A),
@@ -478,7 +546,10 @@ class _ScanScreenState extends State<ScanScreen> {
                       height: 120,
                       decoration: BoxDecoration(
                         gradient: const LinearGradient(
-                          colors: [AppColors.primary, AppColors.primaryDark],
+                          colors: [
+                            AppColors.primaryColor,
+                            AppColors.primaryColor,
+                          ],
                           begin: Alignment.topLeft,
                           end: Alignment.bottomRight,
                         ),
@@ -503,7 +574,7 @@ class _ScanScreenState extends State<ScanScreen> {
                       style: TextStyle(
                         fontSize: 22,
                         fontWeight: FontWeight.w700,
-                        color: AppColors.textPrimary,
+                        color: AppColors.primaryColor,
                       ),
                     ),
                     const SizedBox(height: 8),
@@ -512,7 +583,7 @@ class _ScanScreenState extends State<ScanScreen> {
                       textAlign: TextAlign.center,
                       style: TextStyle(
                         fontSize: 14,
-                        color: AppColors.textSecondary,
+                        color: AppColors.hintColor,
                         height: 1.5,
                       ),
                     ),
@@ -531,8 +602,8 @@ class _ScanScreenState extends State<ScanScreen> {
                           ),
                         ),
                         style: FilledButton.styleFrom(
-                          backgroundColor: AppColors.primary,
-                          foregroundColor: Colors.white,
+                          backgroundColor: AppColors.primaryColor,
+                          foregroundColor: AppColors.whiteColor,
                           elevation: 0,
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(18),
@@ -549,13 +620,13 @@ class _ScanScreenState extends State<ScanScreen> {
                   width: double.infinity,
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
-                    color: AppColors.error.withValues(alpha: 0.08),
+                    color: AppColors.redColor.withValues(alpha: 0.08),
                     borderRadius: BorderRadius.circular(14),
                   ),
                   child: Text(
                     _errorMessage!,
                     textAlign: TextAlign.center,
-                    style: const TextStyle(color: AppColors.error),
+                    style: const TextStyle(color: AppColors.redColor),
                   ),
                 ),
               ],
@@ -651,8 +722,8 @@ class _ScanScreenState extends State<ScanScreen> {
 
   Widget _buildCameraHeader() {
     return Container(
-      height: 144,
-      padding: const EdgeInsets.fromLTRB(28, 12, 28, 12),
+      height: 104,
+      padding: const EdgeInsets.fromLTRB(20, 8, 20, 8),
       decoration: const BoxDecoration(
         color: Color(0xFF181A1B),
         borderRadius: BorderRadius.vertical(bottom: Radius.circular(20)),
@@ -728,8 +799,8 @@ class _ScanScreenState extends State<ScanScreen> {
   Widget _buildCameraControls(CameraController controller) {
     final isTorchOn = controller.value.flashMode == FlashMode.torch;
     return Container(
-      height: 150,
-      padding: const EdgeInsets.fromLTRB(48, 28, 48, 30),
+      height: 118,
+      padding: const EdgeInsets.fromLTRB(40, 14, 40, 16),
       decoration: const BoxDecoration(
         color: Color(0xFF181A1B),
         borderRadius: BorderRadius.vertical(top: Radius.circular(32)),
@@ -750,8 +821,8 @@ class _ScanScreenState extends State<ScanScreen> {
               tooltip: 'Capture ID card',
               onPressed: _isPicking ? null : _takePhoto,
               icon: const SizedBox(
-                width: 104,
-                height: 104,
+                width: 78,
+                height: 78,
                 child: DecoratedBox(
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
@@ -791,7 +862,7 @@ class _ScanScreenState extends State<ScanScreen> {
       padding: const EdgeInsets.all(16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [ 
+        children: [
           AspectRatio(
             aspectRatio: 1.586,
             child: ClipRRect(
@@ -800,10 +871,10 @@ class _ScanScreenState extends State<ScanScreen> {
                 fit: StackFit.expand,
                 children: [
                   _frontImage == null
-                      ? const ColoredBox(color: AppColors.card)
+                      ? const ColoredBox(color: AppColors.strokeColor)
                       : Image.file(_frontImage!, fit: BoxFit.cover),
                   if (_isPicking)
-                    const ColoredBox(
+                    ColoredBox(
                       color: Color(0x99000000),
                       child: Center(
                         child: Column(
@@ -818,10 +889,22 @@ class _ScanScreenState extends State<ScanScreen> {
                               ),
                             ),
                             SizedBox(height: 12),
-                            Icon(
-                              Icons.refresh_rounded,
-                              color: Colors.white,
-                              size: 28,
+                            RotationTransition(
+                              turns: _reloadController,
+                              child: const Icon(
+                                Icons.refresh_rounded,
+                                color: Colors.white,
+                                size: 30,
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            const Text(
+                              'កំពុងអានទិន្នន័យ...',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 15,
+                                fontWeight: FontWeight.w600,
+                              ),
                             ),
                           ],
                         ),
@@ -832,6 +915,10 @@ class _ScanScreenState extends State<ScanScreen> {
             ),
           ),
           const SizedBox(height: 20),
+          if (_errorMessage != null) ...[
+            _buildOcrErrorMessage(),
+            const SizedBox(height: 20),
+          ],
           _buildDetailsForm(),
           const SizedBox(height: 18),
           SizedBox(
@@ -840,8 +927,8 @@ class _ScanScreenState extends State<ScanScreen> {
             child: FilledButton(
               onPressed: _isFormValid && !_isPicking ? _confirm : null,
               style: FilledButton.styleFrom(
-                backgroundColor: const Color(0xFF1D3B74),
-                foregroundColor: Colors.white,
+                backgroundColor: AppColors.primaryColor,
+                foregroundColor: AppColors.whiteColor,
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(12),
                 ),
@@ -850,6 +937,31 @@ class _ScanScreenState extends State<ScanScreen> {
                 'បញ្ជូន',
                 style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
               ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildOcrErrorMessage() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: AppColors.redColor.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppColors.redColor.withValues(alpha: 0.3)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Icon(Icons.error_outline, color: AppColors.redColor),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              _errorMessage!,
+              style: const TextStyle(color: AppColors.redColor),
             ),
           ),
         ],
@@ -866,17 +978,18 @@ class _ScanScreenState extends State<ScanScreen> {
           style: TextStyle(
             fontSize: 17,
             fontWeight: FontWeight.w700,
-            color: AppColors.textPrimary,
+            color: AppColors.primaryColor,
           ),
         ),
         const SizedBox(height: 8),
-        const Divider(color: AppColors.border, height: 1),
+        const Divider(color: AppColors.strokeColor, height: 1),
         const SizedBox(height: 16),
         ...List.generate(_fieldLabels.length, (index) {
           final error = _validationError(index, _controllers[index].text);
           final hasValue = _controllers[index].text.trim().isNotEmpty;
           final isValid = !hasValue || error == null;
-          final borderColor = isValid ? AppColors.border : AppColors.error;
+          final borderColor =
+              isValid ? AppColors.strokeColor : AppColors.redColor;
           final border = OutlineInputBorder(
             borderRadius: BorderRadius.circular(10),
             borderSide: BorderSide(color: borderColor),
@@ -891,7 +1004,7 @@ class _ScanScreenState extends State<ScanScreen> {
                   style: const TextStyle(
                     fontSize: 14,
                     fontWeight: FontWeight.w600,
-                    color: AppColors.textSecondary,
+                    color: AppColors.hintColor,
                   ),
                 ),
                 const SizedBox(height: 6),
@@ -916,27 +1029,29 @@ class _ScanScreenState extends State<ScanScreen> {
                                   ? Icons.check_circle
                                   : Icons.error_outline,
                               color:
-                                  isValid ? AppColors.success : AppColors.error,
+                                  isValid
+                                      ? AppColors.greenColor
+                                      : AppColors.redColor,
                             )
                             : null,
                     enabledBorder: border,
                     focusedBorder: border.copyWith(
                       borderSide: const BorderSide(
-                        color: AppColors.primary,
+                        color: AppColors.primaryColor,
                         width: 1.5,
                       ),
                     ),
                     errorBorder: border.copyWith(
-                      borderSide: const BorderSide(color: AppColors.error),
+                      borderSide: const BorderSide(color: AppColors.redColor),
                     ),
                     focusedErrorBorder: border.copyWith(
                       borderSide: const BorderSide(
-                        color: AppColors.error,
+                        color: AppColors.redColor,
                         width: 1.5,
                       ),
                     ),
                     filled: true,
-                    fillColor: AppColors.background,
+                    fillColor: AppColors.whiteColor,
                     contentPadding: const EdgeInsets.symmetric(
                       horizontal: 14,
                       vertical: 14,

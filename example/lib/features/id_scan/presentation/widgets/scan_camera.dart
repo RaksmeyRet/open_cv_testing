@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../../../../../app/theme/app_colors.dart';
+
 class FrameCorner extends StatelessWidget {
   const FrameCorner({
     super.key,
@@ -59,8 +61,8 @@ class CameraTool extends StatelessWidget {
           color: Colors.white,
           style: IconButton.styleFrom(
             backgroundColor:
-                active ? const Color(0xFF2F6FED) : const Color(0xFF67696A),
-            fixedSize: const Size(64, 64),
+                active ? AppColors.secondaryColor : AppColors.darkGreyColor,
+            fixedSize: const Size(50, 50),
           ),
         ),
         const SizedBox(height: 6),
