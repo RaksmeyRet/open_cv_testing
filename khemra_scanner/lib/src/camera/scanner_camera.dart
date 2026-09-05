@@ -2,6 +2,9 @@ import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
 
 <<<<<<< HEAD
+<<<<<<< HEAD
+=======
+>>>>>>> a675689 (finished created component)
 /// Renders a full-screen camera preview centred within the available space,
 /// maintaining the camera's native aspect ratio.
 class ScannerCameraPreview extends StatelessWidget {
@@ -18,6 +21,7 @@ class ScannerCameraPreview extends StatelessWidget {
       ),
     );
   }
+<<<<<<< HEAD
 =======
 import '../capture/scanner_capture.dart';
 import '../result/scanner_result.dart';
@@ -163,4 +167,6 @@ class _ScannerCameraPageState extends State<ScannerCameraPage>
     return Center(child: CameraPreview(controller));
   }
 >>>>>>> 30a05c6 (add)
+=======
+>>>>>>> a675689 (finished created component)
 }

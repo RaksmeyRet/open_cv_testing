@@ -1,5 +1,6 @@
 name: khemra_scanner
 <<<<<<< HEAD
+<<<<<<< HEAD
 description: "A Flutter package for Cambodian ID card scanning with camera, OCR, and image cropping."
 version: 0.1.0
 homepage:
@@ -7,6 +8,11 @@ homepage:
 description: "Reusable camera scanner components backed by the existing OpenCV plugin."
 version: 0.1.0
 >>>>>>> 30a05c6 (add)
+=======
+description: "A Flutter package for Cambodian ID card scanning with camera, OCR, and image cropping."
+version: 0.1.0
+homepage:
+>>>>>>> a675689 (finished created component)
 
 environment:
   sdk: ^3.10.4
@@ -14,6 +20,9 @@ environment:
 
 dependencies:
 <<<<<<< HEAD
+<<<<<<< HEAD
+=======
+>>>>>>> a675689 (finished created component)
   flutter:
     sdk: flutter
   camera: ^0.11.2+1
@@ -26,18 +35,22 @@ dependencies:
   photo_manager: ^3.12.0
   native_opencv_kit:
     path: ../
+<<<<<<< HEAD
 =======
   camera: ^0.11.2+1
   flutter:
     sdk: flutter
   image: ^4.8.0
 >>>>>>> 30a05c6 (add)
+=======
+>>>>>>> a675689 (finished created component)
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^6.0.0
 
+<<<<<<< HEAD
 <<<<<<< HEAD
 flutter:
   # To add assets to your package, add an assets section
@@ -79,3 +92,7 @@ flutter:
   # For details regarding fonts in packages, see
   # https://flutter.dev/to/font-from-package
 >>>>>>> 30a05c6 (add)
+=======
+flutter:
+  # To add assets to your package, add an assets section
+>>>>>>> a675689 (finished created component)

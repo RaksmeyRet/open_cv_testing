@@ -1,4 +1,7 @@
 <<<<<<< HEAD
+<<<<<<< HEAD
+=======
+>>>>>>> a675689 (finished created component)
 /// KhemraScanner — a Flutter package for Cambodian ID card scanning.
 ///
 /// ## Quick start
@@ -50,8 +53,11 @@ export 'src/widgets/scanner_instruction.dart';
 
 // Utils
 export 'src/utils/scanner_utils.dart';
+<<<<<<< HEAD
 =======
 export 'src/khemra_scanner.dart';
 export 'src/processing/scanner_processor.dart';
 export 'src/result/scanner_result.dart';
 >>>>>>> 30a05c6 (add)
+=======
+>>>>>>> a675689 (finished created component)

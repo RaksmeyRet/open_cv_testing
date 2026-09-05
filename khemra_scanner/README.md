@@ -1,6 +1,9 @@
 # khemra_scanner
 
 <<<<<<< HEAD
+<<<<<<< HEAD
+=======
+>>>>>>> a675689 (finished created component)
 A Flutter package for scanning Cambodian national ID cards with camera, OpenCV-powered cropping, and remote OCR.
 
 ## Features
@@ -86,6 +89,7 @@ lib/
 ## License
 
 MIT
+<<<<<<< HEAD
 =======
 A reusable Flutter camera scanner component. The package owns camera setup,
 capture, lifecycle, and result handling. Image validation is injected so an
@@ -148,3 +152,5 @@ TODO: Tell users more about the package: where to find more information, how to
 contribute to the package, how to file issues, what response they can expect
 from the package authors, and more.
 >>>>>>> 30a05c6 (add)
+=======
+>>>>>>> a675689 (finished created component)
