@@ -13,22 +13,14 @@ class KhemraScanner {
     BuildContext context, {
     ScannerProcessor processor = const ScannerProcessor(),
   }) async {
-    final capture = await Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => const ScannerCameraPage()),
+    final result = await Navigator.of(context).push<KhemraScannerResult>(
+      MaterialPageRoute(
+        builder: (_) => ScannerCameraPage(processor: processor),
+      ),
     );
-    if (capture == null) {
+    if (result == null) {
       return const KhemraScannerResult(isValid: false);
     }
-
-    try {
-      return await processor.process(capture);
-    } on KhemraScannerException {
-      rethrow;
-    } on Object catch (error) {
-      throw KhemraScannerException(
-        'The scan could not be completed.',
-        cause: error,
-      );
-    }
+    return result;
   }
 }
