@@ -12,16 +12,27 @@ import '../widgets/scan_camera.dart';
 import 'crop_page.dart';
 import 'photo_library_page.dart';
 
-class ScanScreen extends StatefulWidget {
+class ScanScreen extends GetView<ScanController> {
   const ScanScreen({super.key});
 
   @override
-  State<ScanScreen> createState() => _ScanScreenState();
+  Widget build(BuildContext context) {
+    return _ScanScreenBody(controller: controller);
+  }
 }
 
-class _ScanScreenState extends State<ScanScreen>
+class _ScanScreenBody extends StatefulWidget {
+  const _ScanScreenBody({required this.controller});
+
+  final ScanController controller;
+
+  @override
+  State<_ScanScreenBody> createState() => _ScanScreenBodyState();
+}
+
+class _ScanScreenBodyState extends State<_ScanScreenBody>
     with SingleTickerProviderStateMixin {
-  late final ScanController scanController = Get.find<ScanController>();
+  late final ScanController scanController;
 
   final List<TextEditingController> _controllers = List.generate(
     5,
@@ -67,6 +78,7 @@ class _ScanScreenState extends State<ScanScreen>
   @override
   void initState() {
     super.initState();
+    scanController = widget.controller;
     _reloadController = AnimationController(
       vsync: this,
       duration: const Duration(seconds: 1),
@@ -152,6 +164,8 @@ class _ScanScreenState extends State<ScanScreen>
       setState(() {
         _frontImage = croppedFile;
         _showCamera = false;
+        scanController.showCamera.value = false;
+        scanController.imagePath.value = croppedFile.path;
       });
       await _runOcr(croppedFile);
     } catch (error) {
