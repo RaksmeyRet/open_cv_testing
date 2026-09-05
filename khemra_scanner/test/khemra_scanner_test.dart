@@ -44,9 +44,48 @@ void main() {
     expect(result.isValid, isFalse);
   });
 
+  test('processor uses an engine for blur and document validation', () async {
+    final source = image_lib.Image(width: 2, height: 2);
+    final png = image_lib.encodePng(source);
+    final processor = ScannerProcessor(
+      engine: _FakeScannerEngine(blurred: false, hasDocument: true),
+    );
+
+    final result = await processor.process(
+      XFile.fromData(Uint8List.fromList(png), name: 'capture.png'),
+    );
+
+    expect(result.isValid, isTrue);
+    expect(result.imageBytes, isNotNull);
+  });
+
   test('scanner exception contains a useful message', () {
     const error = KhemraScannerException('Camera permission was denied.');
 
     expect(error.toString(), contains('Camera permission was denied.'));
   });
+}
+
+class _FakeScannerEngine implements ScannerEngine {
+  _FakeScannerEngine({required this.blurred, required this.hasDocument});
+
+  final bool blurred;
+  final bool hasDocument;
+
+  @override
+  bool isFrameBlurred(Uint8List rgbaBytes, int width, int height) => blurred;
+
+  @override
+  ScannerProcessedImage? cropDocument(
+    Uint8List rgbaBytes,
+    int width,
+    int height,
+  ) {
+    if (!hasDocument) return null;
+    return ScannerProcessedImage(
+      rgbaBytes: rgbaBytes,
+      width: width,
+      height: height,
+    );
+  }
 }

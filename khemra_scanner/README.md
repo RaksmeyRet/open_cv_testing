@@ -1,21 +1,42 @@
 # khemra_scanner
 
 A reusable Flutter camera scanner component. The package owns camera setup,
-capture, lifecycle, and result handling. Image validation is injected so an
-application can connect its preferred processing engine without exposing that
-engine through the scanner API.
+live capture, lifecycle, orientation correction, blur status, crop retry, and
+result handling. Image processing is injected so an application can connect
+OpenCV or another engine without exposing that engine through the scanner API.
 
 ```dart
-final result = await KhemraScanner.scan(context);
+final result = await KhemraScanner.scan(
+	context,
+	processor: ScannerProcessor(engine: MyOpenCvEngine()),
+);
 if (result.isValid) {
 	debugPrint(result.imagePath);
 }
 ```
 
-To reuse the existing OpenCV plugin, pass a `ScannerProcessor` whose validator
-calls `NativeOpencv.isImageBlurred` and performs any application-specific card
-validation. The scanner package deliberately does not depend on a local path
-or Git dependency, so it remains publishable.
+An engine implements `ScannerEngine`. For this repository, the adapter can
+delegate `isFrameBlurred` to `NativeOpencv.isImageBlurred` and `cropDocument`
+to `NativeOpencv.cropIdCard`, returning the native crop dimensions in a
+`ScannerProcessedImage`. The scanner package deliberately does not depend on a
+local path or Git dependency, so it remains reusable and publishable.
+
+The adapter can be created inline:
+
+```dart
+final engine = ScannerEngine(
+	isFrameBlurred: NativeOpencv.isImageBlurred,
+	cropDocument: (rgba, width, height) {
+		final cropped = NativeOpencv.cropIdCard(rgba, width, height);
+		if (cropped == null) return null;
+		return ScannerProcessedImage(
+			rgbaBytes: cropped,
+			width: NativeOpencv.idCardOutputWidth,
+			height: NativeOpencv.idCardOutputHeight,
+		);
+	},
+);
+```
 
 Camera permission is requested by the `camera` plugin during initialization.
 The consuming Android application must declare `android.permission.CAMERA` in
