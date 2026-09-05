@@ -456,7 +456,7 @@
 
 import 'dart:async';
 import 'dart:convert';
-import 'dart:io'; 
+import 'dart:io';
 import 'dart:ui' as ui;
 
 import 'package:camera/camera.dart';
@@ -464,6 +464,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
 import 'package:native_opencv_kit/native_opencv.dart';
+
+import '../../../../app/theme/app_colors.dart';
+import '../../../../core/widgets/my_elevated_button.dart';
 
 class CameraCaptureScreen extends StatefulWidget {
   const CameraCaptureScreen({super.key});
@@ -1042,10 +1045,21 @@ class _CameraCaptureScreenState extends State<CameraCaptureScreen>
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceEvenly,
             children: [
-              ElevatedButton(onPressed: _retry, child: const Text('Retry')),
-              ElevatedButton(
-                onPressed: () => Navigator.of(context).pop(_croppedResultRgba),
-                child: const Text('Use This'),
+              MyElevatedButton(
+                onPress: _retry,
+                text: 'Retry',
+                color: AppColors.primaryColor,
+                textColor: AppColors.whiteColor,
+                icon: const Icon(Icons.refresh_rounded),
+                isWrap: true,
+              ),
+              MyElevatedButton(
+                onPress: () => Navigator.of(context).pop(_croppedResultRgba),
+                text: 'Use This',
+                color: AppColors.primaryColor,
+                textColor: AppColors.whiteColor,
+                icon: const Icon(Icons.check_rounded),
+                isWrap: true,
               ),
             ],
           ),
@@ -1070,9 +1084,13 @@ class _CameraCaptureScreenState extends State<CameraCaptureScreen>
         children: [
           Text(_ocrError!, style: const TextStyle(color: Colors.red)),
           const SizedBox(height: 12),
-          ElevatedButton(
-            onPressed: () => _runOcr(_croppedResultRgba!),
-            child: const Text('Retry OCR'),
+          MyElevatedButton(
+            onPress: () => _runOcr(_croppedResultRgba!),
+            text: 'Retry OCR',
+            color: AppColors.primaryColor,
+            textColor: AppColors.whiteColor,
+            icon: const Icon(Icons.refresh_rounded),
+            isWrap: true,
           ),
         ],
       );
