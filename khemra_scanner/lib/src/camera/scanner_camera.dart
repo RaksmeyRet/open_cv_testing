@@ -10,11 +10,17 @@ import 'package:path_provider/path_provider.dart';
 import '../capture/scanner_capture.dart';
 import '../processing/scanner_processor.dart';
 import '../result/scanner_result.dart';
+import '../style/scanner_style.dart';
 
 class ScannerCameraPage extends StatefulWidget {
-  const ScannerCameraPage({required this.processor, super.key});
+  const ScannerCameraPage({
+    required this.processor,
+    required this.style,
+    super.key,
+  });
 
   final ScannerProcessor processor;
+  final KhemraScannerStyle style;
 
   @override
   State<ScannerCameraPage> createState() => _ScannerCameraPageState();
@@ -46,6 +52,7 @@ class _ScannerCameraPageState extends State<ScannerCameraPage>
     WidgetsBinding.instance.addObserver(this);
     _initializeCamera();
   }
+  
 
   Future<void> _initializeCamera() async {
     if (!mounted) return;
@@ -225,10 +232,11 @@ class _ScannerCameraPageState extends State<ScannerCameraPage>
     if (_showResult && _resultPath != null) return _buildResult();
     final controller = _controller;
     return Scaffold(
-      backgroundColor: Colors.black,
+      backgroundColor: widget.style.backgroundColor,
       appBar: AppBar(
         backgroundColor: Colors.transparent,
-        title: const Text('ID Card Capture'),
+        foregroundColor: widget.style.foregroundColor,
+        title: Text(widget.style.title),
       ),
       body: Stack(
         fit: StackFit.expand,
@@ -239,24 +247,36 @@ class _ScannerCameraPageState extends State<ScannerCameraPage>
             left: 20,
             child: Text(
               _engine == null
-                  ? 'READY'
-                  : (_blurred ? 'IMAGE IS BLURRY' : 'GOOD IMAGE'),
+                  ? widget.style.readyLabel
+                  : (_blurred
+                        ? widget.style.blurryImageLabel
+                        : widget.style.goodImageLabel),
               style: TextStyle(
-                color: _engine == null || !_blurred ? Colors.green : Colors.red,
+                color: _engine == null || !_blurred
+                    ? widget.style.statusGoodColor
+                    : widget.style.statusBadColor,
                 fontSize: 18,
                 fontWeight: FontWeight.bold,
               ),
             ),
           ),
+          if (widget.style.overlay != null) widget.style.overlay!,
           Positioned(
             bottom: 36,
             left: 0,
             right: 0,
             child: Center(
-              child: FloatingActionButton(
-                onPressed: _capturing ? null : _capture,
-                child: const Icon(Icons.camera_alt),
-              ),
+              child: widget.style.captureButton == null
+                  ? FloatingActionButton(
+                      backgroundColor: widget.style.accentColor,
+                      foregroundColor: widget.style.backgroundColor,
+                      onPressed: _capturing ? null : _capture,
+                      child: const Icon(Icons.camera_alt),
+                    )
+                  : GestureDetector(
+                      onTap: _capturing ? null : _capture,
+                      child: widget.style.captureButton,
+                    ),
             ),
           ),
         ],
@@ -266,7 +286,11 @@ class _ScannerCameraPageState extends State<ScannerCameraPage>
 
   Widget _buildResult() {
     return Scaffold(
-      appBar: AppBar(title: const Text('Scan result')),
+      appBar: AppBar(
+        title: Text(widget.style.resultTitle),
+        backgroundColor: widget.style.backgroundColor,
+        foregroundColor: widget.style.foregroundColor,
+      ),
       body: Column(
         children: [
           Expanded(child: Center(child: Image.file(File(_resultPath!)))),
@@ -275,7 +299,10 @@ class _ScannerCameraPageState extends State<ScannerCameraPage>
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceEvenly,
               children: [
-                OutlinedButton(onPressed: _retry, child: const Text('Retry')),
+                OutlinedButton(
+                  onPressed: _retry,
+                  child: Text(widget.style.retryLabel),
+                ),
                 FilledButton(
                   onPressed: () => Navigator.of(context).pop(
                     KhemraScannerResult(
@@ -284,7 +311,7 @@ class _ScannerCameraPageState extends State<ScannerCameraPage>
                       imageBytes: _resultBytes,
                     ),
                   ),
-                  child: const Text('Use image'),
+                  child: Text(widget.style.useImageLabel),
                 ),
               ],
             ),
