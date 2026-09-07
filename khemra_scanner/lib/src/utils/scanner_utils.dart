@@ -13,9 +13,7 @@ abstract final class ScannerUtils {
     final day = int.parse(match.group(3)!);
     if (month < 1 || month > 12 || day < 1) return false;
     final parsed = DateTime(year, month, day);
-    return parsed.year == year &&
-        parsed.month == month &&
-        parsed.day == day;
+    return parsed.year == year && parsed.month == month && parsed.day == day;
   }
 
   /// Converts a 6-digit MRZ date string (YYMMDD) to YYYY-MM-DD format.
@@ -35,27 +33,6 @@ abstract final class ScannerUtils {
   ///
   /// Returns null if the value is valid, or an error message string otherwise.
   static String? fieldValidationError(int index, String value) {
-    final text = value.trim();
-    switch (index) {
-      case 0:
-        return RegExp(r'^\d{9}$').hasMatch(text)
-            ? null
-            : 'Enter the 9-digit ID number.';
-      case 1:
-        return text.length >= 2 && RegExp(r'[^\d]').hasMatch(text)
-            ? null
-            : 'Enter the card holder name.';
-      case 2:
-      case 3:
-        return isValidDate(text)
-            ? null
-            : 'Enter a valid date in YYYY-MM-DD format.';
-      case 4:
-        return const {'male', 'female', 'm', 'f'}.contains(text.toLowerCase())
-            ? null
-            : 'Enter Male, Female, M, or F.';
-      default:
-        return null;
-    }
+    return null;
   }
 }
