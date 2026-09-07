@@ -10,6 +10,7 @@ dependencies:
     sdk: flutter
 <<<<<<< HEAD
 <<<<<<< HEAD
+<<<<<<< HEAD
   plugin_platform_interface: ^2.0.2
   ffi: ^2.2.0
   camera: ^0.11.0
@@ -21,9 +22,25 @@ dev_dependencies:
 =======
 =======
 >>>>>>> f8ef1df (upadte configuration)
+=======
+<<<<<<< Updated upstream
+>>>>>>> 033bb05 (add)
   native_opencv_kit:
     path: ../
   ffi: ^2.2.0
+=======
+
+  plugin_platform_interface: ^2.0.2
+  ffi: ^2.2.0
+  camera: ^0.11.0
+  http: ^1.2.0
+  photo_manager: ^3.12.0
+  get: ^4.7.3
+
+  native_opencv_kit:
+    path: ../
+  ffi: ^2.2.0
+>>>>>>> Stashed changes
   plugin_platform_interface: ^2.0.2
   cupertino_icons: ^1.0.8
   camera: ^0.11.2+1
@@ -35,7 +52,10 @@ dev_dependencies:
   path_provider: ^2.1.1
   http: ^1.6.0
   photo_manager: ^3.12.0
+<<<<<<< Updated upstream
   get: ^4.7.3
+=======
+>>>>>>> Stashed changes
 
 dev_dependencies:
   integration_test:
