@@ -1,3 +1,4 @@
+<<<<<<< Updated upstream
 name: native_opencv_kit
 description: >-
   A Flutter FFI plugin that wraps OpenCV for Android and iOS. Provides
@@ -13,27 +14,53 @@ topics:
   - ffi
   - blur-detection
   - id-card
+=======
+name: native_opencv_kit_example
+description: Demonstrates how to use the native_opencv_kit plugin.
+publish_to: 'none'
+>>>>>>> Stashed changes
 
 environment:
   sdk: ^3.7.2
-  flutter: '>=3.3.0'
 
 dependencies:
   flutter:
     sdk: flutter
+
   plugin_platform_interface: ^2.0.2
   ffi: ^2.2.0
   camera: ^0.11.0
   http: ^1.2.0
   photo_manager: ^3.12.0
   get: ^4.7.3
+<<<<<<< Updated upstream
+=======
+
+  native_opencv_kit:
+    path: ../
+  ffi: ^2.2.0
+  plugin_platform_interface: ^2.0.2
+  cupertino_icons: ^1.0.8
+  camera: ^0.11.2+1
+  get: ^4.7.3
+  image: ^4.8.0
+  image_picker: ^1.2.1
+  image_cropper: ^8.0.2
+  permission_handler: ^12.0.3
+  path_provider: ^2.1.1
+  http: ^1.6.0
+  photo_manager: ^3.12.0
+>>>>>>> Stashed changes
 
 dev_dependencies:
+  integration_test:
+    sdk: flutter
   flutter_test:
     sdk: flutter
   flutter_lints: ^5.0.0
 
 flutter:
+<<<<<<< Updated upstream
   plugin:
     platforms:
       android:
@@ -41,3 +68,6 @@ flutter:
         pluginClass: NativeOpencvPlugin
       ios:
         pluginClass: NativeOpencvPlugin
+=======
+  uses-material-design: true
+>>>>>>> Stashed changes
