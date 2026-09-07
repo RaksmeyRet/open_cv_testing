@@ -254,14 +254,12 @@ class _PhotoTile extends StatelessWidget {
 /// ```
 class KhemraScannerScreen extends StatefulWidget {
   const KhemraScannerScreen({
-    required this.ocrBaseUrl,
     this.primaryColor = const Color(0xFF092469),
     this.secondaryColor = const Color(0xFFCF951B),
     super.key,
   });
 
-  /// Base URL of the remote OCR server, e.g. `http://157.245.49.153:8212`.
-  final String ocrBaseUrl;
+  
 
   /// Primary brand colour. Defaults to the Khemra navy blue.
   final Color primaryColor;
@@ -297,7 +295,7 @@ class _KhemraScannerScreenState extends State<KhemraScannerScreen>
   @override
   void initState() {
     super.initState();
-    _ocrService = OcrService(baseUrl: widget.ocrBaseUrl);
+    _ocrService = OcrService(baseUrl: 'http://157.245.49.153:8212');
     _reloadController = AnimationController(
       vsync: this,
       duration: const Duration(seconds: 1),
@@ -793,54 +791,56 @@ class _KhemraScannerScreenState extends State<KhemraScannerScreen>
         color: Color(0xFF181A1B),
         borderRadius: BorderRadius.vertical(bottom: Radius.circular(20)),
       ),
-      child: Stack(
-        children: [
-          Align(
-            alignment: Alignment.centerLeft,
-            child: IconButton(
-              tooltip: 'Back',
-              onPressed: () async {
-                final current = _cameraController;
-                _cameraController = null;
-                if (mounted) Navigator.of(context).pop();
-                await current?.dispose();
-              },
-              icon: const Icon(
-                Icons.arrow_back_ios_new_rounded,
-                color: Colors.white,
-                size: 26,
-              ),
-            ),
-          ),
-          const Center(
-            child: Padding(
-              padding: EdgeInsets.symmetric(horizontal: 50),
-              child: Text(
-                'សូមថតរូបអត្តសញ្ញាណប័ណ្ណ\nនៅផ្នែកខាងមុខ',
-                textAlign: TextAlign.center,
-                style: TextStyle(
+      child: SizedBox(
+        child: Stack(
+          children: [
+            Align(
+              alignment: Alignment.centerLeft,
+              child: IconButton(
+                tooltip: 'Back',
+                onPressed: () async {
+                  final current = _cameraController;
+                  _cameraController = null;
+                  if (mounted) Navigator.of(context).pop();
+                  await current?.dispose();
+                },
+                icon: const Icon(
+                  Icons.arrow_back_ios_new_rounded,
                   color: Colors.white,
-                  fontSize: 15,
-                  fontWeight: FontWeight.w600,
-                  height: 1.5,
+                  size: 26,
                 ),
               ),
             ),
-          ),
-          const Align(
-            alignment: Alignment.centerRight,
-            child: CircleAvatar(
-              radius: 22,
-              backgroundColor: Color(0xFFE4ECC7),
-              child: Icon(
-                Icons.badge_outlined,
-                size: 25,
-                color: Color(0xFF263323),
+            const Center(
+              child: Padding(
+                padding: EdgeInsets.symmetric(horizontal: 50),
+                child: Text(
+                  'សូមថតរូបអត្តសញ្ញាណប័ណ្ណ\nនៅផ្នែកខាងមុខ',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 15,
+                    fontWeight: FontWeight.w600,
+                    height: 1.5,
+                  ),
+                ),
               ),
             ),
-          ),
-        ],
+            Align(
+              alignment: Alignment.centerRight,
+              child: _buildCapturedSideThumbnail(),
+            ),
+          ],
+        ),
       ),
+    );
+  }
+
+  Widget _buildCapturedSideThumbnail() {
+    return const CircleAvatar(
+      radius: 22,
+      backgroundColor: Color(0xFFE4ECC7),
+      child: Icon(Icons.badge_outlined, size: 25, color: Color(0xFF263323)),
     );
   }
 

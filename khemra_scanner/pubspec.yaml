@@ -1,6 +1,6 @@
 name: khemra_scanner
 description: "A Flutter package for Cambodian ID card scanning with camera, OCR, and image cropping."
-version: 0.1.0
+version: 0.1.1
 homepage:
 
 environment:
