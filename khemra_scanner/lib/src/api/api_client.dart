@@ -21,7 +21,7 @@ class ApiClient {
     
   }) async {
     try {
-      final uri = Uri.parse(url).replace(
+      final uri = Uri.parse('$baseUrl$url').replace(
         queryParameters: params,
       );
 
