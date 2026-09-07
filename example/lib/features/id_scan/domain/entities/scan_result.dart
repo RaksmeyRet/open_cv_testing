@@ -1,4 +1,10 @@
 class ScanResultModel {
+  final String? idNumber;
+  final String? name;
+  final String? dateOfBirth;
+  final String? expiryDate;
+  final String? gender;
+
   const ScanResultModel({
     this.idNumber,
     this.name,
@@ -6,12 +12,6 @@ class ScanResultModel {
     this.expiryDate,
     this.gender,
   });
-
-  final String? idNumber;
-  final String? name;
-  final String? dateOfBirth;
-  final String? expiryDate;
-  final String? gender;
 
   factory ScanResultModel.fromJson(Map<String, dynamic> json) {
     return ScanResultModel(
@@ -45,4 +45,4 @@ class ScanResultModel {
         if (entry.value != null) entry.key: entry.value.toString(),
     };
   }
-}  
+}
