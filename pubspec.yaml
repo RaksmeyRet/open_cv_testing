@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 name: native_opencv_kit
 description: >-
   A Flutter FFI plugin that wraps OpenCV for Android and iOS. Provides
@@ -17,10 +18,19 @@ topics:
 environment:
   sdk: ^3.7.2
   flutter: '>=3.3.0'
+=======
+name: native_opencv_kit_example
+description: Demonstrates how to use the native_opencv_kit plugin.
+publish_to: 'none'
+
+environment:
+  sdk: ^3.7.2
+>>>>>>> a599830 (update result information)
 
 dependencies:
   flutter:
     sdk: flutter
+<<<<<<< HEAD
   plugin_platform_interface: ^2.0.2
   ffi: ^2.2.0
   camera: ^0.11.0
@@ -29,11 +39,32 @@ dependencies:
   get: ^4.7.3
 
 dev_dependencies:
+=======
+  native_opencv_kit:
+    path: ../
+  ffi: ^2.2.0
+  plugin_platform_interface: ^2.0.2
+  cupertino_icons: ^1.0.8
+  camera: ^0.11.2+1
+  get: ^4.7.3
+  image: ^4.8.0
+  image_picker: ^1.2.1
+  image_cropper: ^8.0.2
+  permission_handler: ^12.0.3
+  path_provider: ^2.1.1
+  http: ^1.6.0
+  photo_manager: ^3.12.0
+
+dev_dependencies:
+  integration_test:
+    sdk: flutter
+>>>>>>> a599830 (update result information)
   flutter_test:
     sdk: flutter
   flutter_lints: ^5.0.0
 
 flutter:
+<<<<<<< HEAD
   plugin:
     platforms:
       android:
@@ -41,3 +72,6 @@ flutter:
         pluginClass: NativeOpencvPlugin
       ios:
         pluginClass: NativeOpencvPlugin
+=======
+  uses-material-design: true
+>>>>>>> a599830 (update result information)
