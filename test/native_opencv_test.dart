@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:native_opencv_kit/native_opencv.dart';
 import 'package:native_opencv_kit/native_opencv_platform_interface.dart';
@@ -20,6 +22,10 @@ void main() {
   });
 
   test('getPlatformVersion', () async {
+    if (!Platform.isAndroid && !Platform.isIOS) {
+      return;
+    }
+
     MockNativeOpencvPlatform fakePlatform = MockNativeOpencvPlatform();
     NativeOpencvPlatform.instance = fakePlatform;
 
