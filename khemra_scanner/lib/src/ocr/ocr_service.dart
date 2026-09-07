@@ -12,6 +12,7 @@ class OcrService {
 
   Future<ResponseIdCard> recognize(File imageFile) async {
     final response = await _apiClient.postFormData(
+      headers: {"Content-Type": "multipart/form-data"},
       '/api/ocr/id-card/',
       map: {'language': 'eng+khm'},
       files: [await http.MultipartFile.fromPath('file', imageFile.path)],
