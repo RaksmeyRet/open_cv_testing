@@ -222,12 +222,14 @@ class KhemraScannerController extends GetxController
         errorMessage.value = 'Could not read the ID card. Please try again.';
         return;
       }
-
       idNumberController.text = fields.idNumber ?? '';
       fullnameEnController.text = fields.fullNameEN ?? '';
+      fullnameKHController.text = fields.fullnameKH ?? '';
       dateOfBirthController.text = fields.dateOfBirth ?? '';
       expiryDateController.text = fields.expiryDate ?? '';
       genderController.text = fields.gender ?? '';
+      nationalityController.text = fields.nationality ?? '';
+      address.text = fields.address ?? '';
     } catch (error) {
       if (!Get.isRegistered<KhemraScannerController>()) return;
       errorMessage.value = 'OCR failed: $error';
@@ -235,6 +237,7 @@ class KhemraScannerController extends GetxController
       isPicking.value = false;
     }
   }
+
 
   // ---------------------------------------------------------------------------
   // Form / confirm
