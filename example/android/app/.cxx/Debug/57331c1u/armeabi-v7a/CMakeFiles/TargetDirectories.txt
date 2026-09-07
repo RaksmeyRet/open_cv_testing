@@ -1,0 +1,2 @@
+/home/socheatcheng/open_cv_testing/example/android/app/.cxx/Debug/57331c1u/armeabi-v7a/CMakeFiles/edit_cache.dir
+/home/socheatcheng/open_cv_testing/example/android/app/.cxx/Debug/57331c1u/armeabi-v7a/CMakeFiles/rebuild_cache.dir

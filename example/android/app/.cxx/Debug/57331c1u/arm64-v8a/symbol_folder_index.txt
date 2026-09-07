@@ -1,0 +1,1 @@
+/home/socheatcheng/open_cv_testing/example/build/app/intermediates/cxx/Debug/57331c1u/obj/arm64-v8a
