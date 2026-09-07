@@ -18,6 +18,7 @@ class ApiClient {
     List<http.MultipartFile>? files,
     Map<String, String>? headers,
     Duration timeout = const Duration(seconds: 45),
+    
   }) async {
     try {
       final uri = Uri.parse(url).replace(

@@ -5,7 +5,6 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 
 import '../image/image_cropper.dart';
-import '../models/id_card_data.dart';
 import '../models/khemra_scan_result.dart';
 import '../ocr/ocr_service.dart';
 import '../utils/scanner_utils.dart';
@@ -16,21 +15,24 @@ class KhemraScannerController extends GetxController
   // Text controllers — one per field
   // ---------------------------------------------------------------------------
 
-  final idNumberController    = TextEditingController();
-  final nameController        = TextEditingController();
+  final idNumberController = TextEditingController();
+  final fullnameEnController = TextEditingController();
+  final fullnameKHController = TextEditingController();
   final dateOfBirthController = TextEditingController();
-  final expiryDateController  = TextEditingController();
-  final genderController      = TextEditingController();
+  final expiryDateController = TextEditingController();
+  final genderController = TextEditingController();
+  final nationalityController = TextEditingController();
+  final address = TextEditingController();
 
   // ---------------------------------------------------------------------------
   // Observable state
   // ---------------------------------------------------------------------------
 
-  final frontImage    = Rxn<File>();
-  final cameraCtrl    = Rxn<CameraController>();
-  final showCamera    = true.obs;
-  final isPicking     = false.obs;
-  final errorMessage  = RxnString();
+  final frontImage = Rxn<File>();
+  final cameraCtrl = Rxn<CameraController>();
+  final showCamera = true.obs;
+  final isPicking = false.obs;
+  final errorMessage = RxnString();
 
   /// Bumped on every field change — lets Obx track form validity.
   final _formTick = 0.obs;
@@ -44,13 +46,8 @@ class KhemraScannerController extends GetxController
   // ---------------------------------------------------------------------------
   // Services / config
   // ---------------------------------------------------------------------------
-
   final _ocrService = OcrService(baseUrl: 'http://157.245.49.153:8212');
-  bool _isOpeningCamera = false;
-
-  static const fieldLabels      = IdCardData.defaultFieldLabels;
-  static const fieldLabelsKhmer = IdCardData.defaultFieldLabelsKhmer;
-
+  final _isOpeningCamera = false.obs;
   // ---------------------------------------------------------------------------
   // Lifecycle
   // ---------------------------------------------------------------------------
@@ -64,7 +61,7 @@ class KhemraScannerController extends GetxController
     )..repeat();
 
     idNumberController.addListener(_onFieldChanged);
-    nameController.addListener(_onFieldChanged);
+    fullnameEnController.addListener(_onFieldChanged);
     dateOfBirthController.addListener(_onFieldChanged);
     expiryDateController.addListener(_onFieldChanged);
     genderController.addListener(_onFieldChanged);
@@ -78,7 +75,7 @@ class KhemraScannerController extends GetxController
     cameraCtrl.value?.dispose();
 
     idNumberController.dispose();
-    nameController.dispose();
+    fullnameEnController.dispose();
     dateOfBirthController.dispose();
     expiryDateController.dispose();
     genderController.dispose();
@@ -89,21 +86,19 @@ class KhemraScannerController extends GetxController
   // ---------------------------------------------------------------------------
   // Camera
   // ---------------------------------------------------------------------------
-
   Future<void> openCamera() async {
-    if (_isOpeningCamera) return;
-    _isOpeningCamera = true;
+    if (_isOpeningCamera.value) return;
+    _isOpeningCamera.value = true;
 
     try {
       final previous = cameraCtrl.value;
-      cameraCtrl.value   = null;
-      showCamera.value   = true;
+      cameraCtrl.value = null;
+      showCamera.value = true;
       errorMessage.value = null;
       await previous?.dispose();
 
       final cameras = await availableCameras();
       if (cameras.isEmpty) throw Exception('No camera found on this phone.');
-
       final back = cameras.where(
         (c) => c.lensDirection == CameraLensDirection.back,
       );
@@ -126,7 +121,7 @@ class KhemraScannerController extends GetxController
     } catch (error) {
       errorMessage.value = 'Camera could not be opened: $error';
     } finally {
-      _isOpeningCamera = false;
+      _isOpeningCamera.value = false;
     }
   }
 
@@ -176,8 +171,6 @@ class KhemraScannerController extends GetxController
     }
   }
 
-  /// [pickImage] is provided by the screen layer so the controller never
-  /// needs to import any screen widget.
   Future<void> openGallery(Future<File?> Function() pickImage) async {
     if (showCamera.value) {
       final camera = cameraCtrl.value;
@@ -195,9 +188,9 @@ class KhemraScannerController extends GetxController
       return;
     }
 
-    frontImage.value   = croppedFile;
+    frontImage.value = croppedFile;
     errorMessage.value = null;
-    showCamera.value   = false;
+    showCamera.value = false;
     await _runOcr(croppedFile);
   }
 
@@ -216,7 +209,7 @@ class KhemraScannerController extends GetxController
   // ---------------------------------------------------------------------------
 
   Future<void> _runOcr(File imageFile) async {
-    isPicking.value    = true;
+    isPicking.value = true;
     errorMessage.value = null;
 
     try {
@@ -230,11 +223,11 @@ class KhemraScannerController extends GetxController
         return;
       }
 
-      idNumberController.text    = fields.idNumber    ?? '';
-      nameController.text        = fields.fullNameEN  ?? '';
+      idNumberController.text = fields.idNumber ?? '';
+      fullnameEnController.text = fields.fullNameEN ?? '';
       dateOfBirthController.text = fields.dateOfBirth ?? '';
-      expiryDateController.text  = fields.expiryDate  ?? '';
-      genderController.text      = fields.gender      ?? '';
+      expiryDateController.text = fields.expiryDate ?? '';
+      genderController.text = fields.gender ?? '';
     } catch (error) {
       if (!Get.isRegistered<KhemraScannerController>()) return;
       errorMessage.value = 'OCR failed: $error';
@@ -251,10 +244,14 @@ class KhemraScannerController extends GetxController
     // Read _formTick so Obx knows to re-evaluate when any field changes.
     _formTick.value;
 
-    return ScannerUtils.fieldValidationError(0, idNumberController.text) == null &&
-        ScannerUtils.fieldValidationError(1, nameController.text) == null &&
-        ScannerUtils.fieldValidationError(2, dateOfBirthController.text) == null &&
-        ScannerUtils.fieldValidationError(3, expiryDateController.text) == null &&
+    return ScannerUtils.fieldValidationError(0, idNumberController.text) ==
+            null &&
+        ScannerUtils.fieldValidationError(1, fullnameEnController.text) ==
+            null &&
+        ScannerUtils.fieldValidationError(2, dateOfBirthController.text) ==
+            null &&
+        ScannerUtils.fieldValidationError(3, expiryDateController.text) ==
+            null &&
         ScannerUtils.fieldValidationError(4, genderController.text) == null;
   }
 
@@ -262,11 +259,11 @@ class KhemraScannerController extends GetxController
     if (!isFormValid) return;
     Get.back(
       result: KhemraScanResult(
-        idNumber:    idNumberController.text.trim(),
-        fullNameEN:  nameController.text.trim(),
+        idNumber: idNumberController.text.trim(),
+        fullNameEN: fullnameEnController.text.trim(),
         dateOfBirth: dateOfBirthController.text.trim(),
-        expiryDate:  expiryDateController.text.trim(),
-        gender:      genderController.text.trim(),
+        expiryDate: expiryDateController.text.trim(),
+        gender: genderController.text.trim(),
       ),
     );
   }

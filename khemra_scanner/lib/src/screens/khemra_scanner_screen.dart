@@ -1,7 +1,6 @@
 import 'dart:io';
 import 'dart:typed_data';
 
-
 import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
@@ -93,8 +92,9 @@ class _CameraView extends GetView<KhemraScannerController> {
           const SizedBox(height: 16),
           Obx(
             () => FilledButton(
-              onPressed:
-                  controller.isPicking.value ? null : controller.openCamera,
+              onPressed: controller.isPicking.value
+                  ? null
+                  : controller.openCamera,
               child: const Text('Try again'),
             ),
           ),
@@ -122,10 +122,7 @@ class _CameraView extends GetView<KhemraScannerController> {
           children: [
             _CameraPreview(camera: camera),
             ScannerOverlay(frameRect: frameRect),
-            Positioned.fromRect(
-              rect: frameRect,
-              child: const ScannerFrame(),
-            ),
+            Positioned.fromRect(rect: frameRect, child: const ScannerFrame()),
             SafeArea(
               child: Column(
                 children: [
@@ -245,10 +242,11 @@ class _CameraControls extends GetView<KhemraScannerController> {
               icon: Icons.photo_library_outlined,
               label: 'រូបភាព',
               onPressed: picking
-                    ? null
-                    : () => controller.openGallery(
-                          () async => Get.to<File>(() => const PhotoLibraryScreen()),
-                        ),
+                  ? null
+                  : () => controller.openGallery(
+                      () async =>
+                          Get.to<File>(() => const PhotoLibraryScreen()),
+                    ),
             ),
             Semantics(
               button: true,
@@ -315,8 +313,9 @@ class _PreviewFormView extends GetView<KhemraScannerController> {
         leading: Obx(
           () => IconButton(
             tooltip: 'ត្រឡប់ទៅកាមេរ៉ា',
-            onPressed:
-                controller.isPicking.value ? null : controller.openCamera,
+            onPressed: controller.isPicking.value
+                ? null
+                : controller.openCamera,
             icon: const Icon(Icons.arrow_back_rounded),
           ),
         ),
@@ -331,7 +330,10 @@ class _PreviewFormView extends GetView<KhemraScannerController> {
         child: Obx(() {
           final image = controller.frontImage.value;
           return image == null
-              ? _EmptyState(primaryColor: primaryColor, secondaryColor: secondaryColor)
+              ? _EmptyState(
+                  primaryColor: primaryColor,
+                  secondaryColor: secondaryColor,
+                )
               : _ImageAndForm(primaryColor: primaryColor);
         }),
       ),
@@ -365,7 +367,10 @@ class _EmptyState extends GetView<KhemraScannerController> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              _SecureBadge(primaryColor: primaryColor, secondaryColor: secondaryColor),
+              _SecureBadge(
+                primaryColor: primaryColor,
+                secondaryColor: secondaryColor,
+              ),
               const SizedBox(height: 20),
               Text(
                 'Scan your ID card',
@@ -405,7 +410,10 @@ class _EmptyState extends GetView<KhemraScannerController> {
 }
 
 class _SecureBadge extends StatelessWidget {
-  const _SecureBadge({required this.primaryColor, required this.secondaryColor});
+  const _SecureBadge({
+    required this.primaryColor,
+    required this.secondaryColor,
+  });
 
   final Color primaryColor;
   final Color secondaryColor;
@@ -545,9 +553,7 @@ class _ImageAndForm extends GetView<KhemraScannerController> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          _ImagePreview(
-            reloadAnimController: controller.reloadAnimController,
-          ),
+          _ImagePreview(reloadAnimController: controller.reloadAnimController),
           const SizedBox(height: 20),
           Obx(() {
             final error = controller.errorMessage.value;
@@ -566,10 +572,9 @@ class _ImageAndForm extends GetView<KhemraScannerController> {
               width: double.infinity,
               height: 56,
               child: FilledButton(
-                onPressed:
-                    controller.isFormValid && !controller.isPicking.value
-                        ? controller.confirm
-                        : null,
+                onPressed: controller.isFormValid && !controller.isPicking.value
+                    ? controller.confirm
+                    : null,
                 style: FilledButton.styleFrom(
                   backgroundColor: primaryColor,
                   foregroundColor: Colors.white,
@@ -688,7 +693,7 @@ class _DetailsForm extends GetView<KhemraScannerController> {
         _FormField(
           label: 'គោត្តនាមនិងនាម',
           hint: 'Name',
-          textController: controller.nameController,
+          textController: controller.fullnameEnController,
           primaryColor: primaryColor,
           keyboardType: TextInputType.name,
           validate: (v) => ScannerUtils.fieldValidationError(1, v),
@@ -713,6 +718,24 @@ class _DetailsForm extends GetView<KhemraScannerController> {
           label: 'ភេទ',
           hint: 'Gender',
           textController: controller.genderController,
+          primaryColor: primaryColor,
+          keyboardType: TextInputType.name,
+          isLast: true,
+          validate: (v) => ScannerUtils.fieldValidationError(4, v),
+        ),
+        _FormField(
+          label: 'nationality',
+          hint: 'Nationality',
+          textController: controller.nationalityController,
+          primaryColor: primaryColor,
+          keyboardType: TextInputType.name,
+          isLast: true,
+          validate: (v) => ScannerUtils.fieldValidationError(4, v),
+        ),
+        _FormField(
+          label: 'address',
+          hint: 'Address',
+          textController: controller.address,
           primaryColor: primaryColor,
           keyboardType: TextInputType.name,
           isLast: true,
@@ -752,8 +775,9 @@ class _FormField extends StatelessWidget {
         final error = validate(text);
         final hasValue = text.trim().isNotEmpty;
         final isValid = !hasValue || error == null;
-        final borderColor =
-            isValid ? const Color(0xFFEAEAEA) : const Color(0xFFE53935);
+        final borderColor = isValid
+            ? const Color(0xFFEAEAEA)
+            : const Color(0xFFE53935);
         final baseBorder = OutlineInputBorder(
           borderRadius: BorderRadius.circular(10),
           borderSide: BorderSide(color: borderColor),
@@ -776,8 +800,9 @@ class _FormField extends StatelessWidget {
               TextField(
                 controller: textController,
                 keyboardType: keyboardType,
-                textInputAction:
-                    isLast ? TextInputAction.done : TextInputAction.next,
+                textInputAction: isLast
+                    ? TextInputAction.done
+                    : TextInputAction.next,
                 decoration: InputDecoration(
                   hintText: hint,
                   errorText: hasValue ? error : null,
@@ -894,10 +919,8 @@ class PhotoLibraryScreen extends GetView<PhotoLibraryController> {
             ),
             const SizedBox(height: 16),
             Obx(
-              () => Text(
-                controller.message.value!,
-                textAlign: TextAlign.center,
-              ),
+              () =>
+                  Text(controller.message.value!, textAlign: TextAlign.center),
             ),
             const SizedBox(height: 16),
             OutlinedButton(

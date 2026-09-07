@@ -16,7 +16,6 @@ class OcrService {
       map: {'language': 'eng+khm'},
       files: [await http.MultipartFile.fromPath('file', imageFile.path)],
     );
-
     return ResponseIdCard.fromJson(response);
   }
 }

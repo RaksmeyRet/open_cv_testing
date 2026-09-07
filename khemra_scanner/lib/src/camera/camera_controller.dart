@@ -18,9 +18,6 @@ class ScannerCameraController extends GetxController {
     super.onClose();
   }
 
-  /// Opens the back-facing camera and initialises [cameraController].
-  ///
-  /// Resolves the best available back camera at [ResolutionPreset.high].
   Future<void> openCamera() async {
     if (isOpeningCamera.value) return;
     isOpeningCamera.value = true;
