@@ -45,4 +45,4 @@ class ScanResultModel {
         if (entry.value != null) entry.key: entry.value.toString(),
     };
   }
-}
+}  
