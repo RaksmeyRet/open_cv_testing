@@ -6,14 +6,11 @@ import 'package:khemra_scanner/src/api/api_client.dart';
 import 'package:khemra_scanner/src/api/api_params.dart';
 
 class OcrService {
-  final ApiClient _apiClient;
-
-  OcrService({required String baseUrl})
-    : _apiClient = ApiClient(baseUrl: baseUrl);
-
+  final _apiClient = ApiClient();
+  OcrService();
   Future<ResponseIdCard> recognize(File imageFile) async {
     final response = await _apiClient.postFormData(
-      '/api/ocr/id-card/',
+      'http://157.245.49.153:8212/api/ocr/id-card/',
       map: {'language': 'eng+khm'},
       files: [await http.MultipartFile.fromPath('file', imageFile.path)],
     );
@@ -21,7 +18,6 @@ class OcrService {
       final err = response[ApiParams.errors] as Map<String, dynamic>;
       throw Exception(err[ApiParams.text] ?? 'Unknown error');
     }
-
     return ResponseIdCard.fromJson(response);
   }
 }

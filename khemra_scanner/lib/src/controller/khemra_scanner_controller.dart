@@ -46,7 +46,7 @@ class KhemraScannerController extends GetxController
   // ---------------------------------------------------------------------------
   // Services / config
   // ---------------------------------------------------------------------------
-  final _ocrService = OcrService(baseUrl: 'http://157.245.49.153:8212');
+  final _ocrService = OcrService();
   final _isOpeningCamera = false.obs;
   // ---------------------------------------------------------------------------
   // Lifecycle

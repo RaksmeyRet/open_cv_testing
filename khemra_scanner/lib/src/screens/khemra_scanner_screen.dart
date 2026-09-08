@@ -5,10 +5,8 @@ import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:photo_manager/photo_manager.dart';
-
 import '../controller/khemra_scanner_controller.dart';
 import '../controller/photo_library_controller.dart';
-import '../utils/scanner_utils.dart';
 import '../widgets/scanner_frame.dart';
 import '../widgets/scanner_instruction.dart';
 import '../widgets/scanner_overlay.dart';
@@ -688,7 +686,12 @@ class _DetailsForm extends GetView<KhemraScannerController> {
           textController: controller.idNumberController,
           primaryColor: primaryColor,
           keyboardType: TextInputType.number,
-          validate: (v) => ScannerUtils.fieldValidationError(0, v),
+          validate: (value) {
+            if (value == "") {
+              return ('Id number is required');
+            }
+            return null;
+          },
         ),
         _FormField(
           label: 'គោត្តនាមនិងនាម',
@@ -696,7 +699,12 @@ class _DetailsForm extends GetView<KhemraScannerController> {
           textController: controller.fullnameEnController,
           primaryColor: primaryColor,
           keyboardType: TextInputType.name,
-          validate: (v) => ScannerUtils.fieldValidationError(1, v),
+          validate: (value) {
+            if (value == "") {
+              return ('fullname is required');
+            }
+            return null;
+          },
         ),
         _FormField(
           label: 'ថ្ងៃខែឆ្នាំកំណើត',
@@ -704,7 +712,12 @@ class _DetailsForm extends GetView<KhemraScannerController> {
           textController: controller.dateOfBirthController,
           primaryColor: primaryColor,
           keyboardType: TextInputType.datetime,
-          validate: (v) => ScannerUtils.fieldValidationError(2, v),
+          validate: (value) {
+            if (value == "") {
+              return ('Date of birth is required');
+            }
+            return null;
+          },
         ),
         _FormField(
           label: 'ថ្ងៃផុតកំណត់',
@@ -712,7 +725,12 @@ class _DetailsForm extends GetView<KhemraScannerController> {
           textController: controller.expiryDateController,
           primaryColor: primaryColor,
           keyboardType: TextInputType.datetime,
-          validate: (v) => ScannerUtils.fieldValidationError(3, v),
+          validate: (value) {
+            if (value == "") {
+              return ('Expired date is required');
+            }
+            return null;
+          },
         ),
         _FormField(
           label: 'ភេទ',
@@ -721,7 +739,12 @@ class _DetailsForm extends GetView<KhemraScannerController> {
           primaryColor: primaryColor,
           keyboardType: TextInputType.name,
           isLast: true,
-          validate: (v) => ScannerUtils.fieldValidationError(4, v),
+          validate: (value) {
+            if (value == "") {
+              return ('Gender is required');
+            }
+            return null;
+          },
         ),
         _FormField(
           label: 'nationality',
@@ -730,7 +753,12 @@ class _DetailsForm extends GetView<KhemraScannerController> {
           primaryColor: primaryColor,
           keyboardType: TextInputType.name,
           isLast: true,
-          validate: (v) => ScannerUtils.fieldValidationError(4, v),
+          validate: (value) {
+            if (value == "") {
+              return ('Nationality is required');
+            }
+            return null;
+          },
         ),
         _FormField(
           label: 'address',
@@ -739,7 +767,12 @@ class _DetailsForm extends GetView<KhemraScannerController> {
           primaryColor: primaryColor,
           keyboardType: TextInputType.name,
           isLast: true,
-          validate: (v) => ScannerUtils.fieldValidationError(4, v),
+          validate: (value) {
+            if (value == "") {
+              return ('Current address is required');
+            }
+            return null;
+          },
         ),
       ],
     );
@@ -767,7 +800,6 @@ class _FormField extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // ValueListenableBuilder keeps rebuilds scoped to this one field only.
     return ValueListenableBuilder<TextEditingValue>(
       valueListenable: textController,
       builder: (context, value, _) {

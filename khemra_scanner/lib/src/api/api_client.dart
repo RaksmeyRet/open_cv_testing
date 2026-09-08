@@ -5,12 +5,6 @@ import 'dart:io';
 import 'package:http/http.dart' as http;
 
 class ApiClient {
-  final String baseUrl;
-
-  ApiClient({
-    required this.baseUrl,
-  });
-
   Future<Map<String, dynamic>> postFormData(
     String url, {
     required Map<String, String> map,
@@ -21,7 +15,7 @@ class ApiClient {
     
   }) async {
     try {
-      final uri = Uri.parse('$baseUrl$url').replace(
+      final uri = Uri.parse(url).replace(
         queryParameters: params,
       );
 
