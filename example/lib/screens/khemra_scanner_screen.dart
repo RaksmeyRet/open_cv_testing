@@ -928,7 +928,11 @@ class _KhemraScannerScreenState extends State<KhemraScannerScreen>
                 children: [
                   _frontImage == null
                       ? const ColoredBox(color: Color(0xFFEAEAEA))
-                      : Image.file(_frontImage!, fit: BoxFit.cover),
+                      : Image.file(
+                          _frontImage!,
+                          fit: BoxFit.contain,
+                          filterQuality: FilterQuality.high,
+                        ),
                   if (_isPicking)
                     ColoredBox(
                       color: const Color(0x99000000),
