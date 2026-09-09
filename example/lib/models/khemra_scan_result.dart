@@ -1,5 +1,6 @@
-class ScanResultModel {
-  const ScanResultModel({
+/// Result model returned after a successful ID card scan.
+class KhemraScanResult {
+  const KhemraScanResult({
     this.idNumber,
     this.name,
     this.dateOfBirth,
@@ -13,12 +14,14 @@ class ScanResultModel {
   final String? expiryDate;
   final String? gender;
 
-  factory ScanResultModel.fromJson(Map<String, dynamic> json) {
-    return ScanResultModel(
+  factory KhemraScanResult.fromJson(Map<String, dynamic> json) {
+    return KhemraScanResult(
       idNumber: json['ID number'] ?? json['idnumber'] ?? json['idNumber'],
       name: json['Name'] ?? json['name'] ?? json['fullname'],
-      dateOfBirth: json['Date of birth'] ?? json['dateofbirth'] ?? json['dob'],
-      expiryDate: json['Expiry date'] ?? json['expirydate'] ?? json['expiry'],
+      dateOfBirth:
+          json['Date of birth'] ?? json['dateofbirth'] ?? json['dob'],
+      expiryDate:
+          json['Expiry date'] ?? json['expirydate'] ?? json['expiry'],
       gender: json['Gender'] ?? json['gender'] ?? json['sex'],
     );
   }
@@ -33,16 +36,23 @@ class ScanResultModel {
     };
   }
 
-  static List<ScanResultModel> parsed(List<dynamic> list) {
+  static List<KhemraScanResult> parseList(List<dynamic> list) {
     return list
-        .map((item) => ScanResultModel.fromJson(item as Map<String, dynamic>))
+        .map(
+          (item) =>
+              KhemraScanResult.fromJson(item as Map<String, dynamic>),
+        )
         .toList();
   }
 
+  /// Returns a display-friendly map of non-null fields.
   Map<String, String> toDisplayMap() {
     return {
       for (final entry in toJson().entries)
         if (entry.value != null) entry.key: entry.value.toString(),
     };
   }
-}  
+
+  @override
+  String toString() => 'KhemraScanResult(${toJson()})';
+}

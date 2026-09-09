@@ -1,7 +1,13 @@
-import 'package:flutter/widgets.dart';
+import 'package:flutter/material.dart';
+import 'package:get/get.dart';
 
-import 'app/scan_demo_app.dart';
+import 'screens/khemra_scanner_screen.dart';
 
 void main() {
-  runApp(const ScanDemoApp());
+  runApp(
+    const GetMaterialApp(
+      debugShowCheckedModeBanner: false,
+      home: KhemraScannerScreen(),
+    ),
+  );
 }

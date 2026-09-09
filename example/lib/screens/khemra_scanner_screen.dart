@@ -1,38 +1,282 @@
-import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
-import 'package:http/http.dart' as http;
+import 'package:photo_manager/photo_manager.dart';
 
-import '../../../../app/theme/app_colors.dart';
-import '../controllers/scan_controller.dart';
-import '../widgets/scan_camera.dart';
-import 'crop_page.dart';
-import 'photo_library_page.dart';
+import '../image/image_cropper.dart';
+import '../models/id_card_data.dart';
+import '../models/khemra_scan_result.dart';
+import '../ocr/ocr_service.dart';
+import '../utils/scanner_utils.dart';
+import '../widgets/scanner_frame.dart';
+import '../widgets/scanner_instruction.dart';
+import '../widgets/scanner_overlay.dart';
 
-class ScanScreen extends GetView<ScanController> {
-  const ScanScreen({super.key});
+// ---------------------------------------------------------------------------
+// Photo library screen (self-contained)
+// ---------------------------------------------------------------------------
+
+class _PhotoLibraryController extends GetxController {
+  static const _pageSize = 60;
+
+  final ScrollController scrollController = ScrollController();
+  final photos = <AssetEntity>[].obs;
+  final album = Rxn<AssetPathEntity>();
+  final isLoading = true.obs;
+  final hasMore = true.obs;
+  final isPermissionDenied = false.obs;
+  final isLimitedAccess = false.obs;
+  final message = RxnString();
+  final page = 0.obs;
 
   @override
-  Widget build(BuildContext context) {
-    return _ScanScreenBody(controller: controller);
+  void onInit() {
+    super.onInit();
+    scrollController.addListener(_loadMoreWhenNeeded);
+    _loadPhotoLibrary();
+  }
+
+  @override
+  void onClose() {
+    scrollController
+      ..removeListener(_loadMoreWhenNeeded)
+      ..dispose();
+    super.onClose();
+  }
+
+  Future<void> _loadPhotoLibrary() async {
+    final permission = await PhotoManager.requestPermissionExtend();
+    if (!Get.context!.mounted) return;
+
+    if (!permission.hasAccess) {
+      isLoading.value = false;
+      isPermissionDenied.value = true;
+      message.value = 'Photo access is needed to select an ID card image.';
+      return;
+    }
+
+    isPermissionDenied.value = false;
+    isLimitedAccess.value = permission == PermissionState.limited;
+    message.value = null;
+
+    final albums = await PhotoManager.getAssetPathList(
+      type: RequestType.image,
+      onlyAll: true,
+    );
+    if (albums.isEmpty) {
+      isLoading.value = false;
+      message.value = 'No photos were found on this device.';
+      return;
+    }
+
+    album.value = albums.first;
+    await _loadNextPage();
+  }
+
+  void _loadMoreWhenNeeded() {
+    if (scrollController.position.extentAfter < 360) _loadNextPage();
+  }
+
+  Future<void> _loadNextPage() async {
+    final currentAlbum = album.value;
+    if (currentAlbum == null ||
+        (isLoading.value && page.value > 0) ||
+        !hasMore.value) {
+      return;
+    }
+
+    isLoading.value = true;
+    try {
+      final nextPage = await currentAlbum.getAssetListPaged(
+        page: page.value,
+        size: _pageSize,
+      );
+      if (!Get.isRegistered<_PhotoLibraryController>()) return;
+      photos.addAll(nextPage);
+      page.value++;
+      hasMore.value = nextPage.length == _pageSize;
+      isLoading.value = false;
+    } catch (_) {
+      isLoading.value = false;
+      message.value = 'Could not load your photos.';
+    }
+  }
+
+  Future<void> selectPhoto(AssetEntity asset) async {
+    final imageFile = await asset.file;
+    if (imageFile == null) return;
+    Get.back(result: imageFile);
+  }
+
+  Future<void> reload() async {
+    photos.clear();
+    page.value = 0;
+    hasMore.value = true;
+    isLoading.value = true;
+    message.value = null;
+    await _loadPhotoLibrary();
   }
 }
 
-class _ScanScreenBody extends StatefulWidget {
-  const _ScanScreenBody({required this.controller});
-
-  final ScanController controller;
+class _PhotoLibraryScreen extends GetView<_PhotoLibraryController> {
+  const _PhotoLibraryScreen();
 
   @override
-  State<_ScanScreenBody> createState() => _ScanScreenBodyState();
+  Widget build(BuildContext context) {
+    final ctrl = Get.put(_PhotoLibraryController());
+    return Scaffold(
+      backgroundColor: Colors.white,
+      appBar: AppBar(
+        backgroundColor: Colors.white,
+        foregroundColor: const Color(0xFF092469),
+        elevation: 0,
+        title: const Text(
+          'រូបថត',
+          style: TextStyle(fontWeight: FontWeight.w700),
+        ),
+        actions: [
+          if (ctrl.isLimitedAccess.value)
+            TextButton(
+              onPressed: () async {
+                await PhotoManager.presentLimited();
+                await ctrl.reload();
+              },
+              child: const Text('Select more photos'),
+            ),
+        ],
+      ),
+      body: Obx(() {
+        if (ctrl.message.value != null) {
+          return _buildMessage(ctrl);
+        }
+        if (ctrl.photos.isEmpty && ctrl.isLoading.value) {
+          return const Center(child: CircularProgressIndicator());
+        }
+        return GridView.builder(
+          controller: ctrl.scrollController,
+          padding: const EdgeInsets.all(3),
+          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: 3,
+            crossAxisSpacing: 3,
+            mainAxisSpacing: 3,
+          ),
+          itemCount:
+              ctrl.photos.length + (ctrl.hasMore.value ? 1 : 0),
+          itemBuilder: (context, index) {
+            if (index == ctrl.photos.length) {
+              return const Center(child: CircularProgressIndicator());
+            }
+            return _PhotoTile(
+              asset: ctrl.photos[index],
+              onTap: () => ctrl.selectPhoto(ctrl.photos[index]),
+            );
+          },
+        );
+      }),
+    );
+  }
+
+  Widget _buildMessage(_PhotoLibraryController ctrl) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(32),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(
+              Icons.photo_library_outlined,
+              size: 52,
+              color: Color(0xFF6B7280),
+            ),
+            const SizedBox(height: 16),
+            Text(ctrl.message.value!, textAlign: TextAlign.center),
+            const SizedBox(height: 16),
+            OutlinedButton(
+              onPressed: ctrl.reload,
+              child: const Text('Allow access'),
+            ),
+            if (ctrl.isPermissionDenied.value) ...[
+              const SizedBox(height: 8),
+              TextButton(
+                onPressed: PhotoManager.openSetting,
+                child: const Text('Open settings'),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
 }
 
-class _ScanScreenBodyState extends State<_ScanScreenBody>
+class _PhotoTile extends StatelessWidget {
+  const _PhotoTile({required this.asset, required this.onTap});
+
+  final AssetEntity asset;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      child: FutureBuilder<Uint8List?>(
+        future: asset.thumbnailDataWithSize(const ThumbnailSize(360, 360)),
+        builder: (context, snapshot) {
+          final thumbnail = snapshot.data;
+          if (thumbnail == null) {
+            return const ColoredBox(color: Color(0xFFEAEAEA));
+          }
+          return Image.memory(thumbnail, fit: BoxFit.cover);
+        },
+      ),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Main KhemraScannerScreen
+// ---------------------------------------------------------------------------
+
+/// The main scanner screen widget.
+///
+/// Push this screen onto the navigator and await it to receive a
+/// [KhemraScanResult] (or `null` if the user cancelled):
+///
+/// ```dart
+/// final result = await Navigator.of(context).push<KhemraScanResult>(
+///   MaterialPageRoute(builder: (_) => KhemraScannerScreen(
+///     ocrBaseUrl: 'http://your-ocr-server:8212',
+///   )),
+/// );
+/// ```
+class KhemraScannerScreen extends StatefulWidget {
+  const KhemraScannerScreen({
+    this.primaryColor = const Color(0xFF092469),
+    this.secondaryColor = const Color(0xFFCF951B),
+    super.key,
+  });
+
+
+
+  /// Primary brand colour. Defaults to the Khemra navy blue.
+  final Color primaryColor;
+
+  /// Accent colour. Defaults to the Khemra gold.
+  final Color secondaryColor;
+
+  @override
+  State<KhemraScannerScreen> createState() => _KhemraScannerScreenState();
+}
+
+class _KhemraScannerScreenState extends State<KhemraScannerScreen>
     with SingleTickerProviderStateMixin {
-  late final ScanController scanController;
+  static const String _ocrBaseUrl = String.fromEnvironment(
+    'OCR_BASE_URL',
+    defaultValue: 'http://157.245.49.153:8212',
+  );
 
   final List<TextEditingController> _controllers = List.generate(
     5,
@@ -47,23 +291,26 @@ class _ScanScreenBodyState extends State<_ScanScreenBody>
   String? _errorMessage;
   late final AnimationController _reloadController;
 
-  static const String _ocrBaseUrl = 'http://157.245.49.153:8212';
+  late final OcrService _ocrService;
 
-  static const List<String> _fieldLabels = [
-    'ID number',
-    'Name',
-    'Date of birth',
-    'Expiry date',
-    'Gender',
-  ];
+  static const List<String> _fieldLabels = IdCardData.defaultFieldLabels;
+  static const List<String> _fieldLabelsKhmer =
+      IdCardData.defaultFieldLabelsKhmer;
 
-  static const List<String> _fieldLabelsKhmer = [
-    'លេខអត្តសញ្ញាណ',
-    'គោត្តនាមនិងនាម',
-    'ថ្ងៃខែឆ្នាំកំណើត',
-    'ថ្ងៃផុតកំណត់',
-    'ភេទ',
-  ];
+  @override
+  void initState() {
+    super.initState();
+    _ocrService = OcrService(baseUrl: _ocrBaseUrl);
+    _reloadController = AnimationController(
+      vsync: this,
+      duration: const Duration(seconds: 1),
+    )..repeat();
+    for (final controller in _controllers) {
+      controller.addListener(_updateFieldValidation);
+    }
+    _showCamera = true;
+    _openCamera();
+  }
 
   @override
   void dispose() {
@@ -75,25 +322,13 @@ class _ScanScreenBodyState extends State<_ScanScreenBody>
     super.dispose();
   }
 
-  @override
-  void initState() {
-    super.initState();
-    scanController = widget.controller;
-    _reloadController = AnimationController(
-      vsync: this,
-      duration: const Duration(seconds: 1),
-    )..repeat();
-    for (final controller in _controllers) {
-      controller.addListener(_updateFieldValidation);
-    }
-    scanController.showCamera.value = true;
-    _showCamera = true;
-    _openCamera();
-  }
-
   void _updateFieldValidation() {
     if (mounted) setState(() {});
   }
+
+  // ---------------------------------------------------------------------------
+  // Camera
+  // ---------------------------------------------------------------------------
 
   Future<void> _openCamera() async {
     if (_isOpeningCamera) return;
@@ -101,23 +336,20 @@ class _ScanScreenBodyState extends State<_ScanScreenBody>
 
     try {
       final previousController = _cameraController;
-      scanController.isOpeningCamera.value = true;
       setState(() {
         _showCamera = true;
-        scanController.showCamera.value = true;
         _errorMessage = null;
-        scanController.errorMessage.value = null;
         _cameraController = null;
       });
       await previousController?.dispose();
 
       final cameras = await availableCameras();
       if (cameras.isEmpty) throw Exception('No camera found on this phone.');
-      final backCamera = cameras.where(
-        (camera) => camera.lensDirection == CameraLensDirection.back,
+      final back = cameras.where(
+        (c) => c.lensDirection == CameraLensDirection.back,
       );
       final controller = CameraController(
-        backCamera.isNotEmpty ? backCamera.first : cameras.first,
+        back.isNotEmpty ? back.first : cameras.first,
         ResolutionPreset.high,
         enableAudio: false,
         imageFormatGroup: ImageFormatGroup.jpeg,
@@ -130,22 +362,20 @@ class _ScanScreenBodyState extends State<_ScanScreenBody>
       setState(() => _cameraController = controller);
     } catch (error) {
       if (mounted) {
-        setState(() {
-          _errorMessage = 'Camera could not be opened: $error';
-        });
+        setState(() => _errorMessage = 'Camera could not be opened: $error');
       }
     } finally {
       _isOpeningCamera = false;
-      scanController.isOpeningCamera.value = false;
     }
   }
 
   Future<void> _takePhoto() async {
     final controller = _cameraController;
-    if (controller == null || !controller.value.isInitialized || _isPicking) {
+    if (controller == null ||
+        !controller.value.isInitialized ||
+        _isPicking) {
       return;
     }
-    scanController.isPicking.value = true;
     setState(() => _isPicking = true);
     try {
       final photo = await controller.takePicture();
@@ -164,8 +394,6 @@ class _ScanScreenBodyState extends State<_ScanScreenBody>
       setState(() {
         _frontImage = croppedFile;
         _showCamera = false;
-        scanController.showCamera.value = false;
-        scanController.imagePath.value = croppedFile.path;
       });
       await _runOcr(croppedFile);
     } catch (error) {
@@ -173,22 +401,21 @@ class _ScanScreenBodyState extends State<_ScanScreenBody>
         setState(() => _errorMessage = 'Could not take photo: $error');
       }
     } finally {
-      scanController.isPicking.value = false;
       if (mounted) setState(() => _isPicking = false);
     }
   }
 
   Future<void> _toggleFlash() async {
     final controller = _cameraController;
-    if (controller == null || !controller.value.isInitialized || _isPicking) {
+    if (controller == null ||
+        !controller.value.isInitialized ||
+        _isPicking) {
       return;
     }
-
     try {
-      final nextMode =
-          controller.value.flashMode == FlashMode.torch
-              ? FlashMode.off
-              : FlashMode.torch;
+      final nextMode = controller.value.flashMode == FlashMode.torch
+          ? FlashMode.off
+          : FlashMode.torch;
       await controller.setFlashMode(nextMode);
       if (mounted) setState(() {});
     } catch (error) {
@@ -203,12 +430,11 @@ class _ScanScreenBodyState extends State<_ScanScreenBody>
     if (_showCamera) {
       final controller = _cameraController;
       _cameraController = null;
-      scanController.showCamera.value = false;
       if (mounted) setState(() => _showCamera = false);
       await controller?.dispose();
     }
     final imageFile = await navigator.push<File>(
-      MaterialPageRoute(builder: (_) => const PhotoLibraryScreen()),
+      MaterialPageRoute(builder: (_) => const _PhotoLibraryScreen()),
     );
     if (!mounted || imageFile == null) return;
 
@@ -219,254 +445,83 @@ class _ScanScreenBodyState extends State<_ScanScreenBody>
       return;
     }
 
-    scanController.imagePath.value = croppedFile.path;
     setState(() {
       _frontImage = croppedFile;
       _errorMessage = null;
-      scanController.errorMessage.value = null;
       _showCamera = false;
-      scanController.showCamera.value = false;
     });
     await _runOcr(croppedFile);
   }
 
   Future<File?> _cropImage(File source) {
     return Navigator.of(context).push<File>(
-      MaterialPageRoute(builder: (_) => FourCornerCropScreen(source: source)),
+      MaterialPageRoute(
+        builder: (_) => KhemraImageCropperScreen(source: source),
+      ),
     );
   }
 
-  Future<bool> _runOcr(File imageFile) async {
-    scanController.isPicking.value = true;
-    scanController.errorMessage.value = null;
+  // ---------------------------------------------------------------------------
+  // OCR
+  // ---------------------------------------------------------------------------
+
+  Future<void> _runOcr(File imageFile) async {
     setState(() {
       _isPicking = true;
       _errorMessage = null;
     });
 
-    try {
-      final request =
-          http.MultipartRequest(
-              'POST',
-              Uri.parse('$_ocrBaseUrl/api/ocr/id-card/'),
-            )
-            ..fields['language'] = 'eng+khm'
-            ..files.add(
-              await http.MultipartFile.fromPath('file', imageFile.path),
-            );
-      final streamedResponse = await request.send().timeout(
-        const Duration(seconds: 45),
-      );
-      final response = await http.Response.fromStream(streamedResponse);
+    final result = await _ocrService.recognize(imageFile);
 
-      if (response.statusCode != 200) {
-        throw Exception(
-          'OCR failed (HTTP ${response.statusCode}): ${response.body}',
-        );
-      }
+    if (!mounted) return;
 
-      final decoded = jsonDecode(response.body) as Map<String, dynamic>;
-      final fields = _extractOcrFields(decoded);
-      _fillMissingMrzFields(fields, decoded);
-
-      final mrzId = _findMrzId(decoded);
-      if (mrzId != null) {
-        fields['idnumber'] = mrzId;
-      }
-
-      final rawMrzId = _findRawMrzId(decoded['raw_text']);
-      if (_fieldValue(fields, 0).isEmpty && rawMrzId != null) {
-        fields['idnumber'] = rawMrzId;
-      }
-
-      final hasRecognizedValue = List.generate(
-        _fieldLabels.length,
-        (index) => _fieldValue(fields, index).isNotEmpty,
-      ).any((value) => value);
-      if (!hasRecognizedValue) {
-        throw Exception('OCR returned no recognizable ID-card fields');
-      }
-
-      final values = List.generate(
-        _fieldLabels.length,
-        (index) => _fieldValue(fields, index),
-      );
-      if (mounted) {
-        setState(() {
-          for (var index = 0; index < _controllers.length; index++) {
-            _controllers[index].text = values[index];
-          }
-        });
-      }
-      return true;
-    } catch (error) {
-      if (mounted) {
-        setState(
-          () =>
-              _errorMessage =
-                  'Could not connect to the OCR backend at $_ocrBaseUrl. '
-                  'Make this URL reachable from the phone, then try again.\n$error',
-        );
-      }
-    } finally {
-      scanController.isPicking.value = false;
-      if (mounted) setState(() => _isPicking = false);
-    }
-    return false;
-  }
-
-  Map<String, String> _extractOcrFields(Map<String, dynamic> response) {
-    final fields = <String, String>{};
-
-    void visit(dynamic value, [String prefix = '']) {
-      if (value is Map) {
-        value.forEach((key, child) {
-          final name = _normalizeKey('$key');
-          if (child is Map || child is List) {
-            visit(child, name);
-          } else if (child != null) {
-            final text = '$child'.trim();
-            if (text.isNotEmpty && text != 'null') {
-              fields[name] = text;
-              if (prefix.isNotEmpty) fields['$prefix$name'] = text;
-            }
-          }
-        });
-      } else if (value is List) {
-        for (final child in value) {
-          visit(child, prefix);
-        }
-      }
+    if (!result.isSuccess) {
+      setState(() {
+        _errorMessage = result.error;
+        _isPicking = false;
+      });
+      return;
     }
 
-    visit(response);
-    return fields;
-  }
-
-  void _fillMissingMrzFields(
-    Map<String, String> fields,
-    Map<String, dynamic> response,
-  ) {
-    final rawText =
-        [
-          response['raw_text'],
-          response['rawText'],
-          response['text'],
-          response['ocr_text'],
-        ].whereType<String>().join('\n').toUpperCase();
-    if (rawText.isEmpty) return;
-
-    final normalizedText = rawText.replaceAll(RegExp(r'[^A-Z0-9<]'), '');
-    final idMatch = RegExp(
-      r'(?:IDKHM|LDKHM|TDKHM)([0-9O]{9})[0-9O]',
-    ).firstMatch(normalizedText);
-    if (_fieldValue(fields, 0).isEmpty && idMatch != null) {
-      fields['idnumber'] = idMatch.group(1)!.replaceAll('O', '0');
-    }
-
-    final dateMatch = RegExp(r'([0-9]{6})[0-9][MF]').firstMatch(normalizedText);
-    if (_fieldValue(fields, 2).isEmpty && dateMatch != null) {
-      fields['dateofbirth'] = _formatMrzDate(dateMatch.group(1)!);
-    }
-  }
-
-  String? _findMrzId(dynamic value) {
-    String? found;
-
-    void visit(dynamic child) {
-      if (found != null) return;
-      if (child is String) {
-        final normalized = child.toUpperCase().replaceAll(' ', '');
-        final match = RegExp(
-          r'IDKHM[^0-9O]{0,4}([0-9O]{9})[0-9O]',
-        ).firstMatch(normalized);
-        if (match != null) {
-          found = match.group(1)!.replaceAll('O', '0');
-        }
-      } else if (child is Map) {
-        for (final item in child.values) {
-          visit(item);
-          if (found != null) return;
-        }
-      } else if (child is List) {
-        for (final item in child) {
-          visit(item);
-          if (found != null) return;
-        }
+    setState(() {
+      for (var i = 0; i < _controllers.length; i++) {
+        _controllers[i].text = result.values[i];
       }
-    }
-
-    visit(value);
-    return found;
+      _isPicking = false;
+    });
   }
 
-  String? _findRawMrzId(dynamic value) {
-    if (value is! String) return null;
-    for (final line in value.toUpperCase().split(RegExp(r'\r?\n'))) {
-      final compact = line.replaceAll(RegExp(r'[^0-9]'), '');
-      if (line.contains('<<') && compact.length >= 10) {
-        final lastTen = compact.substring(compact.length - 10);
-        return lastTen.substring(0, 9);
-      }
-    }
-    return null;
-  }
-
-  String _formatMrzDate(String value) {
-    final year = int.parse(value.substring(0, 2));
-    final fullYear = year <= 50 ? 2000 + year : 1900 + year;
-    return '$fullYear-${value.substring(2, 4)}-${value.substring(4, 6)}';
-  }
-
-  String _fieldValue(Map<String, String> fields, int index) {
-    const keys = [
-      ['idnumber', 'idno', 'identitynumber', 'documentnumber'],
-      [
-        'name',
-        'fullname',
-        'full_name',
-        'fullnameen',
-        'full_name_en',
-        'englishname',
-        'nameen',
-      ],
-      ['dateofbirth', 'dob', 'birthdate', 'birth', 'datebirth'],
-      [
-        'expirydate',
-        'expiry',
-        'expirationdate',
-        'expiration',
-        'dateofexpiry',
-        'validuntil',
-      ],
-      ['gender', 'sex', 'genderidentity'],
-    ];
-    for (final key in keys[index]) {
-      final value = fields[_normalizeKey(key)];
-      if (value != null && value.trim().isNotEmpty && value != 'null') {
-        return value.trim();
-      }
-    }
-    return '';
-  }
-
-  String _normalizeKey(String value) =>
-      value.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '');
+  // ---------------------------------------------------------------------------
+  // Form / confirm
+  // ---------------------------------------------------------------------------
 
   void _confirm() {
     if (!_isFormValid) return;
-    final result = <String, String>{};
-    for (var index = 0; index < _fieldLabels.length; index++) {
-      result[_fieldLabels[index]] = _controllers[index].text.trim();
-    }
+    final result = KhemraScanResult(
+      idNumber: _controllers[0].text.trim(),
+      name: _controllers[1].text.trim(),
+      dateOfBirth: _controllers[2].text.trim(),
+      expiryDate: _controllers[3].text.trim(),
+      gender: _controllers[4].text.trim(),
+    );
     Navigator.of(context).pop(result);
   }
 
+  bool get _isFormValid => List.generate(
+    _controllers.length,
+    (i) =>
+        ScannerUtils.fieldValidationError(i, _controllers[i].text) == null,
+  ).every((v) => v);
+
+  // ---------------------------------------------------------------------------
+  // Build
+  // ---------------------------------------------------------------------------
+
   @override
   Widget build(BuildContext context) {
-    if (scanController.showCamera.value) return _buildCameraState();
+    if (_showCamera) return _buildCameraState();
     return Scaffold(
-      backgroundColor: AppColors.whiteColor,
+      backgroundColor: Colors.white,
       appBar: AppBar(
         leading: IconButton(
           tooltip: 'ត្រឡប់ទៅកាមេរ៉ា',
@@ -478,13 +533,19 @@ class _ScanScreenBodyState extends State<_ScanScreenBody>
           style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
         ),
         backgroundColor: Colors.transparent,
-        foregroundColor: AppColors.primaryColor,
+        foregroundColor: const Color(0xFF092469),
       ),
       body: SafeArea(
-        child: _frontImage == null ? _buildEmptyState() : _buildImagePreview(),
+        child: _frontImage == null
+            ? _buildEmptyState()
+            : _buildImagePreview(),
       ),
     );
   }
+
+  // ---------------------------------------------------------------------------
+  // Empty state (no image yet)
+  // ---------------------------------------------------------------------------
 
   Widget _buildEmptyState() {
     return Container(
@@ -492,7 +553,7 @@ class _ScanScreenBodyState extends State<_ScanScreenBody>
         gradient: LinearGradient(
           begin: Alignment.topCenter,
           end: Alignment.bottomCenter,
-          colors: [AppColors.whiteColor, AppColors.strokeColor],
+          colors: [Colors.white, Color(0xFFEAEAEA)],
         ),
       ),
       child: SingleChildScrollView(
@@ -507,7 +568,7 @@ class _ScanScreenBodyState extends State<_ScanScreenBody>
                   vertical: 8,
                 ),
                 decoration: BoxDecoration(
-                  color: AppColors.secondaryColor,
+                  color: widget.secondaryColor,
                   borderRadius: BorderRadius.circular(999),
                 ),
                 child: Text(
@@ -515,17 +576,17 @@ class _ScanScreenBodyState extends State<_ScanScreenBody>
                   style: TextStyle(
                     fontSize: 12,
                     fontWeight: FontWeight.w700,
-                    color: AppColors.primaryColor,
+                    color: widget.primaryColor,
                   ),
                 ),
               ),
               const SizedBox(height: 20),
-              const Text(
+              Text(
                 'Scan your ID card',
                 style: TextStyle(
                   fontSize: 32,
                   fontWeight: FontWeight.w800,
-                  color: AppColors.primaryColor,
+                  color: widget.primaryColor,
                 ),
               ),
               const SizedBox(height: 8),
@@ -533,7 +594,7 @@ class _ScanScreenBodyState extends State<_ScanScreenBody>
                 'Capture your ID card in a clean and secure way.',
                 style: TextStyle(
                   fontSize: 15,
-                  color: AppColors.hintColor,
+                  color: Color(0xFF6B7280),
                   height: 1.5,
                 ),
               ),
@@ -542,9 +603,9 @@ class _ScanScreenBodyState extends State<_ScanScreenBody>
                 width: double.infinity,
                 padding: const EdgeInsets.all(20),
                 decoration: BoxDecoration(
-                  color: AppColors.whiteColor,
+                  color: Colors.white,
                   borderRadius: BorderRadius.circular(26),
-                  border: Border.all(color: AppColors.strokeColor),
+                  border: Border.all(color: const Color(0xFFEAEAEA)),
                   boxShadow: const [
                     BoxShadow(
                       color: Color(0x140F172A),
@@ -559,14 +620,7 @@ class _ScanScreenBodyState extends State<_ScanScreenBody>
                       width: 120,
                       height: 120,
                       decoration: BoxDecoration(
-                        gradient: const LinearGradient(
-                          colors: [
-                            AppColors.primaryColor,
-                            AppColors.primaryColor,
-                          ],
-                          begin: Alignment.topLeft,
-                          end: Alignment.bottomRight,
-                        ),
+                        color: widget.primaryColor,
                         borderRadius: BorderRadius.circular(32),
                         boxShadow: const [
                           BoxShadow(
@@ -583,12 +637,12 @@ class _ScanScreenBodyState extends State<_ScanScreenBody>
                       ),
                     ),
                     const SizedBox(height: 18),
-                    const Text(
+                    Text(
                       'Ready to scan',
                       style: TextStyle(
                         fontSize: 22,
                         fontWeight: FontWeight.w700,
-                        color: AppColors.primaryColor,
+                        color: widget.primaryColor,
                       ),
                     ),
                     const SizedBox(height: 8),
@@ -597,7 +651,7 @@ class _ScanScreenBodyState extends State<_ScanScreenBody>
                       textAlign: TextAlign.center,
                       style: TextStyle(
                         fontSize: 14,
-                        color: AppColors.hintColor,
+                        color: Color(0xFF6B7280),
                         height: 1.5,
                       ),
                     ),
@@ -616,8 +670,8 @@ class _ScanScreenBodyState extends State<_ScanScreenBody>
                           ),
                         ),
                         style: FilledButton.styleFrom(
-                          backgroundColor: AppColors.primaryColor,
-                          foregroundColor: AppColors.whiteColor,
+                          backgroundColor: widget.primaryColor,
+                          foregroundColor: Colors.white,
                           elevation: 0,
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(18),
@@ -634,13 +688,13 @@ class _ScanScreenBodyState extends State<_ScanScreenBody>
                   width: double.infinity,
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
-                    color: AppColors.redColor.withValues(alpha: 0.08),
+                    color: const Color(0xFFE53935).withValues(alpha: 0.08),
                     borderRadius: BorderRadius.circular(14),
                   ),
                   child: Text(
                     _errorMessage!,
                     textAlign: TextAlign.center,
-                    style: const TextStyle(color: AppColors.redColor),
+                    style: const TextStyle(color: Color(0xFFE53935)),
                   ),
                 ),
               ],
@@ -651,77 +705,77 @@ class _ScanScreenBodyState extends State<_ScanScreenBody>
     );
   }
 
+  // ---------------------------------------------------------------------------
+  // Camera state
+  // ---------------------------------------------------------------------------
+
   Widget _buildCameraState() {
     final controller = _cameraController;
     return Scaffold(
       backgroundColor: Colors.black,
-      body:
-          controller == null
-              ? Center(
-                child:
-                    _errorMessage == null
-                        ? const CircularProgressIndicator(color: Colors.white)
-                        : Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            const Icon(
-                              Icons.camera_alt_outlined,
-                              color: Colors.white,
-                              size: 48,
-                            ),
-                            const SizedBox(height: 16),
-                            Padding(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 24,
-                              ),
-                              child: Text(
-                                _errorMessage!,
-                                textAlign: TextAlign.center,
-                                style: const TextStyle(color: Colors.white),
-                              ),
-                            ),
-                            const SizedBox(height: 16),
-                            FilledButton(
-                              onPressed: _isPicking ? null : _openCamera,
-                              child: const Text('Try again'),
-                            ),
-                          ],
+      body: controller == null
+          ? Center(
+              child: _errorMessage == null
+                  ? const CircularProgressIndicator(color: Colors.white)
+                  : Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(
+                          Icons.camera_alt_outlined,
+                          color: Colors.white,
+                          size: 48,
                         ),
-              )
-              : LayoutBuilder(
-                builder: (context, constraints) {
-                  final frameWidth = constraints.maxWidth * 0.82;
-                  final frameHeight = frameWidth / 1.57;
-                  final frameRect = Rect.fromCenter(
-                    center: Offset(
-                      constraints.maxWidth / 2,
-                      constraints.maxHeight * 0.49,
+                        const SizedBox(height: 16),
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 24),
+                          child: Text(
+                            _errorMessage!,
+                            textAlign: TextAlign.center,
+                            style: const TextStyle(color: Colors.white),
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                        FilledButton(
+                          onPressed: _isPicking ? null : _openCamera,
+                          child: const Text('Try again'),
+                        ),
+                      ],
                     ),
-                    width: frameWidth,
-                    height: frameHeight,
-                  );
-                  return Stack(
-                    fit: StackFit.expand,
-                    children: [
-                      _buildCameraPreview(controller),
-                      CustomPaint(painter: _ScanMaskPainter(frameRect)),
-                      Positioned.fromRect(
-                        rect: frameRect,
-                        child: _buildScanFrame(),
+            )
+          : LayoutBuilder(
+              builder: (context, constraints) {
+                final frameWidth = constraints.maxWidth * 0.82;
+                final frameHeight = frameWidth / 1.57;
+                final frameRect = Rect.fromCenter(
+                  center: Offset(
+                    constraints.maxWidth / 2,
+                    constraints.maxHeight * 0.49,
+                  ),
+                  width: frameWidth,
+                  height: frameHeight,
+                );
+                return Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    _buildCameraPreview(controller),
+                    ScannerOverlay(frameRect: frameRect),
+                    Positioned.fromRect(
+                      rect: frameRect,
+                      child: const ScannerFrame(),
+                    ),
+                    SafeArea(
+                      child: Column(
+                        children: [
+                          _buildCameraHeader(),
+                          const Spacer(),
+                          _buildCameraControls(controller),
+                        ],
                       ),
-                      SafeArea(
-                        child: Column(
-                          children: [
-                            _buildCameraHeader(),
-                            const Spacer(),
-                            _buildCameraControls(controller),
-                          ],
-                        ),
-                      ),
-                    ],
-                  );
-                },
-              ),
+                    ),
+                  ],
+                );
+              },
+            ),
     );
   }
 
@@ -762,13 +816,13 @@ class _ScanScreenBodyState extends State<_ScanScreenBody>
                 ),
               ),
             ),
-            Center(
+            const Center(
               child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 50),
+                padding: EdgeInsets.symmetric(horizontal: 50),
                 child: Text(
                   'សូមថតរូបអត្តសញ្ញាណប័ណ្ណ\nនៅផ្នែកខាងមុខ',
                   textAlign: TextAlign.center,
-                  style: const TextStyle(
+                  style: TextStyle(
                     color: Colors.white,
                     fontSize: 15,
                     fontWeight: FontWeight.w600,
@@ -795,21 +849,6 @@ class _ScanScreenBodyState extends State<_ScanScreenBody>
     );
   }
 
-  Widget _buildScanFrame() {
-    return Stack(
-      children: const [
-        FrameCorner(top: 0, left: 0, horizontal: true),
-        FrameCorner(top: 0, left: 0, horizontal: false),
-        FrameCorner(top: 0, right: 0, horizontal: true),
-        FrameCorner(top: 0, right: 0, horizontal: false),
-        FrameCorner(bottom: 0, left: 0, horizontal: true),
-        FrameCorner(bottom: 0, left: 0, horizontal: false),
-        FrameCorner(bottom: 0, right: 0, horizontal: true),
-        FrameCorner(bottom: 0, right: 0, horizontal: false),
-      ],
-    );
-  }
-
   Widget _buildCameraControls(CameraController controller) {
     final isTorchOn = controller.value.flashMode == FlashMode.torch;
     return Container(
@@ -823,7 +862,7 @@ class _ScanScreenBodyState extends State<_ScanScreenBody>
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          CameraTool(
+          ScannerToolButton(
             icon: Icons.photo_library_outlined,
             label: 'រូបភាព',
             onPressed: _isPicking ? null : _openGallery,
@@ -857,11 +896,10 @@ class _ScanScreenBodyState extends State<_ScanScreenBody>
               ),
             ),
           ),
-          CameraTool(
-            icon:
-                isTorchOn
-                    ? Icons.flash_on_rounded
-                    : Icons.flashlight_on_rounded,
+          ScannerToolButton(
+            icon: isTorchOn
+                ? Icons.flash_on_rounded
+                : Icons.flashlight_on_rounded,
             label: 'ពន្លឺ',
             active: isTorchOn,
             onPressed: _isPicking ? null : _toggleFlash,
@@ -870,6 +908,10 @@ class _ScanScreenBodyState extends State<_ScanScreenBody>
       ),
     );
   }
+
+  // ---------------------------------------------------------------------------
+  // Image preview + form
+  // ---------------------------------------------------------------------------
 
   Widget _buildImagePreview() {
     return SingleChildScrollView(
@@ -885,16 +927,16 @@ class _ScanScreenBodyState extends State<_ScanScreenBody>
                 fit: StackFit.expand,
                 children: [
                   _frontImage == null
-                      ? const ColoredBox(color: AppColors.strokeColor)
+                      ? const ColoredBox(color: Color(0xFFEAEAEA))
                       : Image.file(_frontImage!, fit: BoxFit.cover),
                   if (_isPicking)
                     ColoredBox(
-                      color: Color(0x99000000),
+                      color: const Color(0x99000000),
                       child: Center(
                         child: Column(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            SizedBox(
+                            const SizedBox(
                               width: 42,
                               height: 42,
                               child: CircularProgressIndicator(
@@ -902,7 +944,7 @@ class _ScanScreenBodyState extends State<_ScanScreenBody>
                                 strokeWidth: 3,
                               ),
                             ),
-                            SizedBox(height: 12),
+                            const SizedBox(height: 12),
                             RotationTransition(
                               turns: _reloadController,
                               child: const Icon(
@@ -941,8 +983,8 @@ class _ScanScreenBodyState extends State<_ScanScreenBody>
             child: FilledButton(
               onPressed: _isFormValid && !_isPicking ? _confirm : null,
               style: FilledButton.styleFrom(
-                backgroundColor: AppColors.primaryColor,
-                foregroundColor: AppColors.whiteColor,
+                backgroundColor: widget.primaryColor,
+                foregroundColor: Colors.white,
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(12),
                 ),
@@ -963,19 +1005,21 @@ class _ScanScreenBodyState extends State<_ScanScreenBody>
       width: double.infinity,
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: AppColors.redColor.withValues(alpha: 0.08),
+        color: const Color(0xFFE53935).withValues(alpha: 0.08),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppColors.redColor.withValues(alpha: 0.3)),
+        border: Border.all(
+          color: const Color(0xFFE53935).withValues(alpha: 0.3),
+        ),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Icon(Icons.error_outline, color: AppColors.redColor),
+          const Icon(Icons.error_outline, color: Color(0xFFE53935)),
           const SizedBox(width: 8),
           Expanded(
             child: Text(
               _errorMessage!,
-              style: const TextStyle(color: AppColors.redColor),
+              style: const TextStyle(color: Color(0xFFE53935)),
             ),
           ),
         ],
@@ -987,23 +1031,27 @@ class _ScanScreenBodyState extends State<_ScanScreenBody>
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text(
+        Text(
           'ព័ត៌មានអត្តសញ្ញាណ',
           style: TextStyle(
             fontSize: 17,
             fontWeight: FontWeight.w700,
-            color: AppColors.primaryColor,
+            color: widget.primaryColor,
           ),
         ),
         const SizedBox(height: 8),
-        const Divider(color: AppColors.strokeColor, height: 1),
+        const Divider(color: Color(0xFFEAEAEA), height: 1),
         const SizedBox(height: 16),
         ...List.generate(_fieldLabels.length, (index) {
-          final error = _validationError(index, _controllers[index].text);
+          final error = ScannerUtils.fieldValidationError(
+            index,
+            _controllers[index].text,
+          );
           final hasValue = _controllers[index].text.trim().isNotEmpty;
           final isValid = !hasValue || error == null;
-          final borderColor =
-              isValid ? AppColors.strokeColor : AppColors.redColor;
+          final borderColor = isValid
+              ? const Color(0xFFEAEAEA)
+              : const Color(0xFFE53935);
           final border = OutlineInputBorder(
             borderRadius: BorderRadius.circular(10),
             borderSide: BorderSide(color: borderColor),
@@ -1018,54 +1066,52 @@ class _ScanScreenBodyState extends State<_ScanScreenBody>
                   style: const TextStyle(
                     fontSize: 14,
                     fontWeight: FontWeight.w600,
-                    color: AppColors.hintColor,
+                    color: Color(0xFF6B7280),
                   ),
                 ),
                 const SizedBox(height: 6),
                 TextField(
                   controller: _controllers[index],
-                  textInputAction:
-                      index == _fieldLabels.length - 1
-                          ? TextInputAction.done
-                          : TextInputAction.next,
-                  keyboardType:
-                      index == 0 || index == 2 || index == 3
-                          ? TextInputType.text
-                          : TextInputType.name,
+                  textInputAction: index == _fieldLabels.length - 1
+                      ? TextInputAction.done
+                      : TextInputAction.next,
+                  keyboardType: index == 0 || index == 2 || index == 3
+                      ? TextInputType.text
+                      : TextInputType.name,
                   decoration: InputDecoration(
                     hintText: _fieldLabels[index],
                     errorText: hasValue ? error : null,
                     errorMaxLines: 2,
-                    suffixIcon:
-                        hasValue
-                            ? Icon(
-                              isValid
-                                  ? Icons.check_circle
-                                  : Icons.error_outline,
-                              color:
-                                  isValid
-                                      ? AppColors.greenColor
-                                      : AppColors.redColor,
-                            )
-                            : null,
+                    suffixIcon: hasValue
+                        ? Icon(
+                            isValid
+                                ? Icons.check_circle
+                                : Icons.error_outline,
+                            color: isValid
+                                ? const Color(0xFF00C300)
+                                : const Color(0xFFE53935),
+                          )
+                        : null,
                     enabledBorder: border,
                     focusedBorder: border.copyWith(
-                      borderSide: const BorderSide(
-                        color: AppColors.primaryColor,
+                      borderSide: BorderSide(
+                        color: widget.primaryColor,
                         width: 1.5,
                       ),
                     ),
                     errorBorder: border.copyWith(
-                      borderSide: const BorderSide(color: AppColors.redColor),
+                      borderSide: const BorderSide(
+                        color: Color(0xFFE53935),
+                      ),
                     ),
                     focusedErrorBorder: border.copyWith(
                       borderSide: const BorderSide(
-                        color: AppColors.redColor,
+                        color: Color(0xFFE53935),
                         width: 1.5,
                       ),
                     ),
                     filled: true,
-                    fillColor: AppColors.whiteColor,
+                    fillColor: Colors.white,
                     contentPadding: const EdgeInsets.symmetric(
                       horizontal: 14,
                       vertical: 14,
@@ -1079,69 +1125,4 @@ class _ScanScreenBodyState extends State<_ScanScreenBody>
       ],
     );
   }
-
-  bool get _isFormValid => List.generate(
-    _controllers.length,
-    (index) => _validationError(index, _controllers[index].text) == null,
-  ).every((isValid) => isValid);
-
-  String? _validationError(int index, String value) {
-    final text = value.trim();
-    switch (index) {
-      case 0:
-        return RegExp(r'^\d{9}$').hasMatch(text)
-            ? null
-            : 'Enter the 9-digit ID number.';
-      case 1:
-        return text.length >= 2 && RegExp(r'[^\d]').hasMatch(text)
-            ? null
-            : 'Enter the card holder name.';
-      case 2:
-      case 3:
-        return _isValidDate(text)
-            ? null
-            : 'Enter a valid date in YYYY-MM-DD format.';
-      case 4:
-        return const {'male', 'female', 'm', 'f'}.contains(text.toLowerCase())
-            ? null
-            : 'Enter Male, Female, M, or F.';
-      default:
-        return null;
-    }
-  }
-
-  bool _isValidDate(String value) {
-    final match = RegExp(r'^(\d{4})-(\d{2})-(\d{2})$').firstMatch(value);
-    if (match == null) return false;
-    final year = int.parse(match.group(1)!);
-    final month = int.parse(match.group(2)!);
-    final day = int.parse(match.group(3)!);
-    if (month < 1 || month > 12 || day < 1) return false;
-    final parsed = DateTime(year, month, day);
-    return parsed.year == year && parsed.month == month && parsed.day == day;
-  }
-}
-
-/// Darkens everything outside the scan frame instead of dimming the whole preview.
-class _ScanMaskPainter extends CustomPainter {
-  _ScanMaskPainter(this.frameRect);
-
-  final Rect frameRect;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final path =
-        Path()
-          ..addRect(Rect.fromLTWH(0, 0, size.width, size.height))
-          ..addRect(frameRect)
-          ..fillType = PathFillType.evenOdd;
-    canvas.drawPath(
-      path,
-      Paint()..color = Colors.black.withValues(alpha: 0.45),
-    );
-  }
-
-  @override
-  bool shouldRepaint(_ScanMaskPainter oldDelegate) =>
-      oldDelegate.frameRect != frameRect;
 }

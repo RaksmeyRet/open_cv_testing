@@ -9,12 +9,11 @@ import 'package:image/image.dart' as img;
 import 'package:native_opencv_kit/native_opencv.dart';
 import 'package:path_provider/path_provider.dart';
 
-import '../../../../app/theme/app_colors.dart';
+// ---------------------------------------------------------------------------
+// Background isolate helpers
+// ---------------------------------------------------------------------------
 
-/// Runs native corner detection on a decoded image. Must run off the UI
-/// isolate since native_opencv_kit's FFI call does CPU-heavy OpenCV work.
-/// Only primitive/TypedData values are passed since `compute` serializes
-/// the input across an isolate boundary.
+/// Runs native corner detection off the UI isolate.
 List<double>? _detectCornersInBackground(Map<String, dynamic> input) {
   final rgba = input['rgba'] as Uint8List;
   final width = input['width'] as int;
@@ -33,7 +32,10 @@ List<double>? _detectCornersInBackground(Map<String, dynamic> input) {
       .toList();
 }
 
-Future<Uint8List> _cropImageInBackground(Map<String, dynamic> input) async {
+/// Performs the actual perspective-crop off the UI isolate.
+Future<Uint8List> _cropImageInBackground(
+  Map<String, dynamic> input,
+) async {
   final sourceBytes = input['bytes'] as Uint8List;
   final values = input['corners'] as List<double>;
   final source = img.decodeImage(sourceBytes);
@@ -46,6 +48,7 @@ Future<Uint8List> _cropImageInBackground(Map<String, dynamic> input) async {
     Offset(values[4], values[5]),
     Offset(values[6], values[7]),
   ];
+
   final topWidth = (corners[1].dx - corners[0].dx).abs() * image.width;
   final bottomWidth = (corners[2].dx - corners[3].dx).abs() * image.width;
   final leftHeight = (corners[3].dy - corners[0].dy).abs() * image.height;
@@ -87,8 +90,13 @@ Future<Uint8List> _cropImageInBackground(Map<String, dynamic> input) async {
   return Uint8List.fromList(img.encodeJpg(result, quality: 92));
 }
 
-class CropPageController extends GetxController {
-  CropPageController(this.source);
+// ---------------------------------------------------------------------------
+// GetX controller
+// ---------------------------------------------------------------------------
+
+/// Controller for the four-corner crop screen.
+class ImageCropperController extends GetxController {
+  ImageCropperController(this.source);
 
   final File source;
 
@@ -100,7 +108,7 @@ class CropPageController extends GetxController {
   final isDetecting = false.obs;
   final error = RxnString();
 
-  static const _idCardAspectRatio = 1.586;
+  static const double _idCardAspectRatio = 1.586;
 
   @override
   void onInit() {
@@ -145,8 +153,8 @@ class CropPageController extends GetxController {
         Offset(values[4], values[5]),
         Offset(values[6], values[7]),
       ]);
-    } catch (error) {
-      debugPrint('Auto-detect corners failed: $error');
+    } catch (err) {
+      debugPrint('Auto-detect corners failed: $err');
     } finally {
       isDetecting.value = false;
     }
@@ -155,7 +163,8 @@ class CropPageController extends GetxController {
   List<Offset> _fallbackCorners(img.Image image) {
     const horizontalPadding = .08;
     final width = 1 - (horizontalPadding * 2);
-    final height = width * image.width / image.height / _idCardAspectRatio;
+    final height =
+        width * image.width / image.height / _idCardAspectRatio;
     final top = ((1 - height) / 2).clamp(.02, .98 - height);
     return [
       Offset(horizontalPadding, top),
@@ -165,6 +174,7 @@ class CropPageController extends GetxController {
     ];
   }
 
+  /// Applies the crop and pops the route with the resulting [File].
   Future<void> apply() async {
     final image = decodedImage.value;
     if (image == null || corners.isEmpty) return;
@@ -176,11 +186,11 @@ class CropPageController extends GetxController {
       final encoded = await compute(_cropImageInBackground, {
         'bytes': bytes,
         'corners':
-            corners.expand((corner) => <double>[corner.dx, corner.dy]).toList(),
+            corners.expand((c) => <double>[c.dx, c.dy]).toList(),
       });
       final directory = await getTemporaryDirectory();
       final file = File(
-        '${directory.path}/manual_crop_${DateTime.now().millisecondsSinceEpoch}.jpg',
+        '${directory.path}/khemra_crop_${DateTime.now().millisecondsSinceEpoch}.jpg',
       );
       await file.writeAsBytes(encoded, flush: true);
       Get.back(result: file);
@@ -191,6 +201,7 @@ class CropPageController extends GetxController {
     }
   }
 
+  /// Updates the position of the active corner during a drag gesture.
   void updateCorner(Offset localPosition, Size size) {
     if (activeCorner.value < 0 || corners.isEmpty) return;
     final next = Offset(
@@ -202,14 +213,20 @@ class CropPageController extends GetxController {
   }
 }
 
-class FourCornerCropScreen extends StatelessWidget {
-  const FourCornerCropScreen({required this.source, super.key});
+// ---------------------------------------------------------------------------
+// Screen widget
+// ---------------------------------------------------------------------------
+
+/// Fullscreen screen that allows the user to adjust four crop corners on an
+/// image, then crops the image to a perspective-corrected rectangle.
+class KhemraImageCropperScreen extends StatelessWidget {
+  const KhemraImageCropperScreen({required this.source, super.key});
 
   final File source;
 
   @override
   Widget build(BuildContext context) {
-    final controller = Get.put(CropPageController(source));
+    final controller = Get.put(ImageCropperController(source));
 
     return Obx(() {
       final image = controller.decodedImage.value;
@@ -217,7 +234,6 @@ class FourCornerCropScreen extends StatelessWidget {
 
       if (controller.error.value != null) {
         return Scaffold(
-          backgroundColor: AppColors.whiteColor,
           body: Center(
             child: Text(
               controller.error.value!,
@@ -229,20 +245,19 @@ class FourCornerCropScreen extends StatelessWidget {
 
       if (image == null || controller.isDetecting.value || corners.isEmpty) {
         return const Scaffold(
-          backgroundColor: AppColors.whiteColor,
           body: Center(child: CircularProgressIndicator()),
         );
       }
 
       return Scaffold(
-        backgroundColor: AppColors.whiteColor,
+        backgroundColor: Colors.white,
         appBar: AppBar(
           title: const Text(
             'តម្រឹមរូបថតអត្តសញ្ញាណប័ណ្ណ',
             style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
           ),
-          backgroundColor: AppColors.whiteColor,
-          foregroundColor: AppColors.primaryColor,
+          backgroundColor: Colors.white,
+          foregroundColor: const Color(0xFF092469),
           centerTitle: true,
         ),
         body: Column(
@@ -266,27 +281,26 @@ class FourCornerCropScreen extends StatelessWidget {
                         onPanStart: (details) {
                           var nearest = 0;
                           var distance = double.infinity;
-                          for (var index = 0; index < corners.length; index++) {
+                          for (var i = 0; i < corners.length; i++) {
                             final point = Offset(
-                              corners[index].dx * previewSize.width,
-                              corners[index].dy * previewSize.height,
+                              corners[i].dx * previewSize.width,
+                              corners[i].dy * previewSize.height,
                             );
-                            final currentDistance =
+                            final d =
                                 (point - details.localPosition).distance;
-                            if (currentDistance < distance) {
-                              nearest = index;
-                              distance = currentDistance;
+                            if (d < distance) {
+                              nearest = i;
+                              distance = d;
                             }
                           }
                           if (distance < 70) {
                             controller.activeCorner.value = nearest;
                           }
                         },
-                        onPanUpdate:
-                            (details) => controller.updateCorner(
-                              details.localPosition,
-                              previewSize,
-                            ),
+                        onPanUpdate: (details) => controller.updateCorner(
+                          details.localPosition,
+                          previewSize,
+                        ),
                         onPanEnd: (_) => controller.activeCorner.value = -1,
                         child: Stack(
                           fit: StackFit.expand,
@@ -304,60 +318,53 @@ class FourCornerCropScreen extends StatelessWidget {
             SafeArea(
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
-                child: Column(
+                child: Row(
                   children: [
-                    Row(
-                      children: [
-                        Expanded(
-                          child: OutlinedButton.icon(
-                            onPressed: () => Get.back(),
-                            icon: const Icon(Icons.camera_alt_outlined),
-                            style: OutlinedButton.styleFrom(
-                              foregroundColor: AppColors.primaryColor,
-                              side: const BorderSide(
-                                color: AppColors.strokeColor,
-                              ),
-                              padding: const EdgeInsets.symmetric(vertical: 16),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                            ),
-                            label: const Text('ថតរូបឡើងវិញ'),
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: () => Get.back(),
+                        icon: const Icon(Icons.camera_alt_outlined),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: const Color(0xFF092469),
+                          side: const BorderSide(color: Color(0xFFEAEAEA)),
+                          padding: const EdgeInsets.symmetric(vertical: 16),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
                           ),
                         ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: FilledButton.icon(
-                            onPressed:
-                                controller.isApplying.value
-                                    ? null
-                                    : controller.apply,
-                            icon:
-                                controller.isApplying.value
-                                    ? const SizedBox(
-                                      width: 18,
-                                      height: 18,
-                                      child: CircularProgressIndicator(
-                                        strokeWidth: 2,
-                                        color: AppColors.whiteColor,
-                                      ),
-                                    )
-                                    : const Icon(Icons.arrow_forward_rounded),
-                            style: FilledButton.styleFrom(
-                              backgroundColor: AppColors.primaryColor,
-                              padding: const EdgeInsets.symmetric(vertical: 16),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                            ),
-                            label: Text(
-                              controller.isApplying.value
-                                  ? 'កំពុងច្រិប...'
-                                  : 'បន្ទាប់',
-                            ),
+                        label: const Text('ថតរូបឡើងវិញ'),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: FilledButton.icon(
+                        onPressed:
+                            controller.isApplying.value
+                                ? null
+                                : controller.apply,
+                        icon: controller.isApplying.value
+                            ? const SizedBox(
+                                width: 18,
+                                height: 18,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: Colors.white,
+                                ),
+                              )
+                            : const Icon(Icons.arrow_forward_rounded),
+                        style: FilledButton.styleFrom(
+                          backgroundColor: const Color(0xFF092469),
+                          padding: const EdgeInsets.symmetric(vertical: 16),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
                           ),
                         ),
-                      ],
+                        label: Text(
+                          controller.isApplying.value
+                              ? 'កំពុងច្រិប...'
+                              : 'បន្ទាប់',
+                        ),
+                      ),
                     ),
                   ],
                 ),
@@ -370,6 +377,10 @@ class FourCornerCropScreen extends StatelessWidget {
   }
 }
 
+// ---------------------------------------------------------------------------
+// Painter
+// ---------------------------------------------------------------------------
+
 class _CropPainter extends CustomPainter {
   _CropPainter(this.corners);
 
@@ -377,13 +388,9 @@ class _CropPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    final points =
-        corners
-            .map(
-              (corner) =>
-                  Offset(corner.dx * size.width, corner.dy * size.height),
-            )
-            .toList();
+    final points = corners
+        .map((c) => Offset(c.dx * size.width, c.dy * size.height))
+        .toList();
     final path = Path()..moveTo(points[0].dx, points[0].dy);
     for (final point in points.skip(1)) {
       path.lineTo(point.dx, point.dy);
@@ -392,13 +399,13 @@ class _CropPainter extends CustomPainter {
     canvas.drawPath(
       path,
       Paint()
-        ..color = AppColors.secondaryColor
+        ..color = const Color(0xFFCF951B)
         ..strokeWidth = 3
         ..style = PaintingStyle.stroke,
     );
     for (final point in points) {
-      canvas.drawCircle(point, 11, Paint()..color = AppColors.whiteColor);
-      canvas.drawCircle(point, 7, Paint()..color = AppColors.primaryColor);
+      canvas.drawCircle(point, 11, Paint()..color = Colors.white);
+      canvas.drawCircle(point, 7, Paint()..color = const Color(0xFF092469));
     }
   }
 
