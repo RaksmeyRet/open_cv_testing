@@ -163,8 +163,7 @@ class _PhotoLibraryScreen extends GetView<_PhotoLibraryController> {
             crossAxisSpacing: 3,
             mainAxisSpacing: 3,
           ),
-          itemCount:
-              ctrl.photos.length + (ctrl.hasMore.value ? 1 : 0),
+          itemCount: ctrl.photos.length + (ctrl.hasMore.value ? 1 : 0),
           itemBuilder: (context, index) {
             if (index == ctrl.photos.length) {
               return const Center(child: CircularProgressIndicator());
@@ -258,8 +257,6 @@ class KhemraScannerScreen extends StatefulWidget {
     this.secondaryColor = const Color(0xFFCF951B),
     super.key,
   });
-
-
 
   /// Primary brand colour. Defaults to the Khemra navy blue.
   final Color primaryColor;
@@ -371,9 +368,7 @@ class _KhemraScannerScreenState extends State<KhemraScannerScreen>
 
   Future<void> _takePhoto() async {
     final controller = _cameraController;
-    if (controller == null ||
-        !controller.value.isInitialized ||
-        _isPicking) {
+    if (controller == null || !controller.value.isInitialized || _isPicking) {
       return;
     }
     setState(() => _isPicking = true);
@@ -407,15 +402,14 @@ class _KhemraScannerScreenState extends State<KhemraScannerScreen>
 
   Future<void> _toggleFlash() async {
     final controller = _cameraController;
-    if (controller == null ||
-        !controller.value.isInitialized ||
-        _isPicking) {
+    if (controller == null || !controller.value.isInitialized || _isPicking) {
       return;
     }
     try {
-      final nextMode = controller.value.flashMode == FlashMode.torch
-          ? FlashMode.off
-          : FlashMode.torch;
+      final nextMode =
+          controller.value.flashMode == FlashMode.torch
+              ? FlashMode.off
+              : FlashMode.torch;
       await controller.setFlashMode(nextMode);
       if (mounted) setState(() {});
     } catch (error) {
@@ -509,8 +503,7 @@ class _KhemraScannerScreenState extends State<KhemraScannerScreen>
 
   bool get _isFormValid => List.generate(
     _controllers.length,
-    (i) =>
-        ScannerUtils.fieldValidationError(i, _controllers[i].text) == null,
+    (i) => ScannerUtils.fieldValidationError(i, _controllers[i].text) == null,
   ).every((v) => v);
 
   // ---------------------------------------------------------------------------
@@ -536,9 +529,7 @@ class _KhemraScannerScreenState extends State<KhemraScannerScreen>
         foregroundColor: const Color(0xFF092469),
       ),
       body: SafeArea(
-        child: _frontImage == null
-            ? _buildEmptyState()
-            : _buildImagePreview(),
+        child: _frontImage == null ? _buildEmptyState() : _buildImagePreview(),
       ),
     );
   }
@@ -713,69 +704,73 @@ class _KhemraScannerScreenState extends State<KhemraScannerScreen>
     final controller = _cameraController;
     return Scaffold(
       backgroundColor: Colors.black,
-      body: controller == null
-          ? Center(
-              child: _errorMessage == null
-                  ? const CircularProgressIndicator(color: Colors.white)
-                  : Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        const Icon(
-                          Icons.camera_alt_outlined,
-                          color: Colors.white,
-                          size: 48,
+      body:
+          controller == null
+              ? Center(
+                child:
+                    _errorMessage == null
+                        ? const CircularProgressIndicator(color: Colors.white)
+                        : Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(
+                              Icons.camera_alt_outlined,
+                              color: Colors.white,
+                              size: 48,
+                            ),
+                            const SizedBox(height: 16),
+                            Padding(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 24,
+                              ),
+                              child: Text(
+                                _errorMessage!,
+                                textAlign: TextAlign.center,
+                                style: const TextStyle(color: Colors.white),
+                              ),
+                            ),
+                            const SizedBox(height: 16),
+                            FilledButton(
+                              onPressed: _isPicking ? null : _openCamera,
+                              child: const Text('Try again'),
+                            ),
+                          ],
                         ),
-                        const SizedBox(height: 16),
-                        Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 24),
-                          child: Text(
-                            _errorMessage!,
-                            textAlign: TextAlign.center,
-                            style: const TextStyle(color: Colors.white),
-                          ),
-                        ),
-                        const SizedBox(height: 16),
-                        FilledButton(
-                          onPressed: _isPicking ? null : _openCamera,
-                          child: const Text('Try again'),
-                        ),
-                      ],
+              )
+              : LayoutBuilder(
+                builder: (context, constraints) {
+                  final frameWidth = constraints.maxWidth * 0.82;
+                  final frameHeight = frameWidth / 1.57;
+                  final frameRect = Rect.fromCenter(
+                    center: Offset(
+                      constraints.maxWidth / 2,
+                      constraints.maxHeight * 0.49,
                     ),
-            )
-          : LayoutBuilder(
-              builder: (context, constraints) {
-                final frameWidth = constraints.maxWidth * 0.82;
-                final frameHeight = frameWidth / 1.57;
-                final frameRect = Rect.fromCenter(
-                  center: Offset(
-                    constraints.maxWidth / 2,
-                    constraints.maxHeight * 0.49,
-                  ),
-                  width: frameWidth,
-                  height: frameHeight,
-                );
-                return Stack(
-                  fit: StackFit.expand,
-                  children: [
-                    _buildCameraPreview(controller),
-                    ScannerOverlay(frameRect: frameRect),
-                    Positioned.fromRect(
-                      rect: frameRect,
-                      child: const ScannerFrame(),
-                    ),
-                    SafeArea(
-                      child: Column(
-                        children: [
-                          _buildCameraHeader(),
-                          const Spacer(),
-                          _buildCameraControls(controller),
-                        ],
+                    width: frameWidth,
+                    height: frameHeight,
+                  );
+                  return Stack(
+                    fit: StackFit.expand,
+                    children: [
+                      _buildCameraPreview(controller),
+                      ScannerOverlay(frameRect: frameRect),
+                      Positioned.fromRect(
+                        rect: frameRect,
+                        child: const ScannerFrame(),
                       ),
-                    ),
-                  ],
-                );
-              },
-            ),
+                      SafeArea(
+                        child: Column(
+                          children: [
+                            _buildCameraHeader(),
+                            const Spacer(),
+                            _buildCameraControls(controller),
+                          ],
+                        ),
+                      ),
+                    ],
+                  );
+                },
+              ),
     );
   }
 
@@ -897,9 +892,10 @@ class _KhemraScannerScreenState extends State<KhemraScannerScreen>
             ),
           ),
           ScannerToolButton(
-            icon: isTorchOn
-                ? Icons.flash_on_rounded
-                : Icons.flashlight_on_rounded,
+            icon:
+                isTorchOn
+                    ? Icons.flash_on_rounded
+                    : Icons.flashlight_on_rounded,
             label: 'ពន្លឺ',
             active: isTorchOn,
             onPressed: _isPicking ? null : _toggleFlash,
@@ -929,10 +925,10 @@ class _KhemraScannerScreenState extends State<KhemraScannerScreen>
                   _frontImage == null
                       ? const ColoredBox(color: Color(0xFFEAEAEA))
                       : Image.file(
-                          _frontImage!,
-                          fit: BoxFit.contain,
-                          filterQuality: FilterQuality.high,
-                        ),
+                        _frontImage!,
+                        fit: BoxFit.contain,
+                        filterQuality: FilterQuality.high,
+                      ),
                   if (_isPicking)
                     ColoredBox(
                       color: const Color(0x99000000),
@@ -1053,9 +1049,8 @@ class _KhemraScannerScreenState extends State<KhemraScannerScreen>
           );
           final hasValue = _controllers[index].text.trim().isNotEmpty;
           final isValid = !hasValue || error == null;
-          final borderColor = isValid
-              ? const Color(0xFFEAEAEA)
-              : const Color(0xFFE53935);
+          final borderColor =
+              isValid ? const Color(0xFFEAEAEA) : const Color(0xFFE53935);
           final border = OutlineInputBorder(
             borderRadius: BorderRadius.circular(10),
             borderSide: BorderSide(color: borderColor),
@@ -1076,26 +1071,30 @@ class _KhemraScannerScreenState extends State<KhemraScannerScreen>
                 const SizedBox(height: 6),
                 TextField(
                   controller: _controllers[index],
-                  textInputAction: index == _fieldLabels.length - 1
-                      ? TextInputAction.done
-                      : TextInputAction.next,
-                  keyboardType: index == 0 || index == 2 || index == 3
-                      ? TextInputType.text
-                      : TextInputType.name,
+                  textInputAction:
+                      index == _fieldLabels.length - 1
+                          ? TextInputAction.done
+                          : TextInputAction.next,
+                  keyboardType:
+                      index == 0 || index == 2 || index == 3
+                          ? TextInputType.text
+                          : TextInputType.name,
                   decoration: InputDecoration(
                     hintText: _fieldLabels[index],
                     errorText: hasValue ? error : null,
                     errorMaxLines: 2,
-                    suffixIcon: hasValue
-                        ? Icon(
-                            isValid
-                                ? Icons.check_circle
-                                : Icons.error_outline,
-                            color: isValid
-                                ? const Color(0xFF00C300)
-                                : const Color(0xFFE53935),
-                          )
-                        : null,
+                    suffixIcon:
+                        hasValue
+                            ? Icon(
+                              isValid
+                                  ? Icons.check_circle
+                                  : Icons.error_outline,
+                              color:
+                                  isValid
+                                      ? const Color(0xFF00C300)
+                                      : const Color(0xFFE53935),
+                            )
+                            : null,
                     enabledBorder: border,
                     focusedBorder: border.copyWith(
                       borderSide: BorderSide(
@@ -1104,9 +1103,7 @@ class _KhemraScannerScreenState extends State<KhemraScannerScreen>
                       ),
                     ),
                     errorBorder: border.copyWith(
-                      borderSide: const BorderSide(
-                        color: Color(0xFFE53935),
-                      ),
+                      borderSide: const BorderSide(color: Color(0xFFE53935)),
                     ),
                     focusedErrorBorder: border.copyWith(
                       borderSide: const BorderSide(

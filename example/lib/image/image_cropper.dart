@@ -42,12 +42,24 @@ Future<Uint8List> _cropImageInBackground(
   if (source == null) throw Exception('Unsupported image');
 
   final image = img.bakeOrientation(source);
-  final corners = [
+  final detectedCorners = [
     Offset(values[0], values[1]),
     Offset(values[2], values[3]),
     Offset(values[4], values[5]),
     Offset(values[6], values[7]),
   ];
+  const cropMargin = 0.025;
+  final center = detectedCorners.reduce((a, b) => a + b) / 4;
+  final corners = detectedCorners
+      .map(
+        (corner) => Offset(
+          (center.dx + (corner.dx - center.dx) * (1 + cropMargin))
+              .clamp(0.0, 1.0),
+          (center.dy + (corner.dy - center.dy) * (1 + cropMargin))
+              .clamp(0.0, 1.0),
+        ),
+      )
+      .toList();
 
   final topWidth = (corners[1].dx - corners[0].dx).abs() * image.width;
   final bottomWidth = (corners[2].dx - corners[3].dx).abs() * image.width;
