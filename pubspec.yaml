@@ -22,6 +22,7 @@ dependencies:
   path_provider: ^2.1.1
   http: ^1.6.0
   photo_manager: ^3.12.0
+  sensors_plus: ^6.1.1
 
 dev_dependencies:
   integration_test:
@@ -32,3 +33,5 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+  assets:
+    - assets/id_card.png

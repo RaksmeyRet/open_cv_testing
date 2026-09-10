@@ -33,33 +33,19 @@ List<double>? _detectCornersInBackground(Map<String, dynamic> input) {
 }
 
 /// Performs the actual perspective-crop off the UI isolate.
-Future<Uint8List> _cropImageInBackground(
-  Map<String, dynamic> input,
-) async {
+Future<Uint8List> _cropImageInBackground(Map<String, dynamic> input) async {
   final sourceBytes = input['bytes'] as Uint8List;
   final values = input['corners'] as List<double>;
   final source = img.decodeImage(sourceBytes);
   if (source == null) throw Exception('Unsupported image');
 
   final image = img.bakeOrientation(source);
-  final detectedCorners = [
+  final corners = [
     Offset(values[0], values[1]),
     Offset(values[2], values[3]),
     Offset(values[4], values[5]),
     Offset(values[6], values[7]),
   ];
-  const cropMargin = 0.025;
-  final center = detectedCorners.reduce((a, b) => a + b) / 4;
-  final corners = detectedCorners
-      .map(
-        (corner) => Offset(
-          (center.dx + (corner.dx - center.dx) * (1 + cropMargin))
-              .clamp(0.0, 1.0),
-          (center.dy + (corner.dy - center.dy) * (1 + cropMargin))
-              .clamp(0.0, 1.0),
-        ),
-      )
-      .toList();
 
   final topWidth = (corners[1].dx - corners[0].dx).abs() * image.width;
   final bottomWidth = (corners[2].dx - corners[3].dx).abs() * image.width;
@@ -108,9 +94,10 @@ Future<Uint8List> _cropImageInBackground(
 
 /// Controller for the four-corner crop screen.
 class ImageCropperController extends GetxController {
-  ImageCropperController(this.source);
+  ImageCropperController(this.source, {required this.onComplete});
 
   final File source;
+  final ValueChanged<File> onComplete;
 
   final Rxn<img.Image> decodedImage = Rxn<img.Image>();
   final Rxn<Uint8List> sourceBytes = Rxn<Uint8List>();
@@ -175,8 +162,7 @@ class ImageCropperController extends GetxController {
   List<Offset> _fallbackCorners(img.Image image) {
     const horizontalPadding = .08;
     final width = 1 - (horizontalPadding * 2);
-    final height =
-        width * image.width / image.height / _idCardAspectRatio;
+    final height = width * image.width / image.height / _idCardAspectRatio;
     final top = ((1 - height) / 2).clamp(.02, .98 - height);
     return [
       Offset(horizontalPadding, top),
@@ -197,15 +183,14 @@ class ImageCropperController extends GetxController {
       final bytes = sourceBytes.value ?? await source.readAsBytes();
       final encoded = await compute(_cropImageInBackground, {
         'bytes': bytes,
-        'corners':
-            corners.expand((c) => <double>[c.dx, c.dy]).toList(),
+        'corners': corners.expand((c) => <double>[c.dx, c.dy]).toList(),
       });
       final directory = await getTemporaryDirectory();
       final file = File(
         '${directory.path}/khemra_crop_${DateTime.now().millisecondsSinceEpoch}.jpg',
       );
       await file.writeAsBytes(encoded, flush: true);
-      Get.back(result: file);
+      onComplete(file);
     } catch (err) {
       error.value = 'Could not crop image: $err';
     } finally {
@@ -238,7 +223,12 @@ class KhemraImageCropperScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final controller = Get.put(ImageCropperController(source));
+    final controller = Get.put(
+      ImageCropperController(
+        source,
+        onComplete: (file) => Navigator.of(context).pop(file),
+      ),
+    );
 
     return Obx(() {
       final image = controller.decodedImage.value;
@@ -256,9 +246,7 @@ class KhemraImageCropperScreen extends StatelessWidget {
       }
 
       if (image == null || controller.isDetecting.value || corners.isEmpty) {
-        return const Scaffold(
-          body: Center(child: CircularProgressIndicator()),
-        );
+        return const Scaffold(body: Center(child: CircularProgressIndicator()));
       }
 
       return Scaffold(
@@ -298,8 +286,7 @@ class KhemraImageCropperScreen extends StatelessWidget {
                               corners[i].dx * previewSize.width,
                               corners[i].dy * previewSize.height,
                             );
-                            final d =
-                                (point - details.localPosition).distance;
+                            final d = (point - details.localPosition).distance;
                             if (d < distance) {
                               nearest = i;
                               distance = d;
@@ -309,10 +296,11 @@ class KhemraImageCropperScreen extends StatelessWidget {
                             controller.activeCorner.value = nearest;
                           }
                         },
-                        onPanUpdate: (details) => controller.updateCorner(
-                          details.localPosition,
-                          previewSize,
-                        ),
+                        onPanUpdate:
+                            (details) => controller.updateCorner(
+                              details.localPosition,
+                              previewSize,
+                            ),
                         onPanEnd: (_) => controller.activeCorner.value = -1,
                         child: Stack(
                           fit: StackFit.expand,
@@ -334,7 +322,7 @@ class KhemraImageCropperScreen extends StatelessWidget {
                   children: [
                     Expanded(
                       child: OutlinedButton.icon(
-                        onPressed: () => Get.back(),
+                        onPressed: () => Navigator.of(context).pop(),
                         icon: const Icon(Icons.camera_alt_outlined),
                         style: OutlinedButton.styleFrom(
                           foregroundColor: const Color(0xFF092469),
@@ -354,16 +342,17 @@ class KhemraImageCropperScreen extends StatelessWidget {
                             controller.isApplying.value
                                 ? null
                                 : controller.apply,
-                        icon: controller.isApplying.value
-                            ? const SizedBox(
-                                width: 18,
-                                height: 18,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                  color: Colors.white,
-                                ),
-                              )
-                            : const Icon(Icons.arrow_forward_rounded),
+                        icon:
+                            controller.isApplying.value
+                                ? const SizedBox(
+                                  width: 18,
+                                  height: 18,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    color: Colors.white,
+                                  ),
+                                )
+                                : const Icon(Icons.arrow_forward_rounded),
                         style: FilledButton.styleFrom(
                           backgroundColor: const Color(0xFF092469),
                           padding: const EdgeInsets.symmetric(vertical: 16),
@@ -400,9 +389,10 @@ class _CropPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    final points = corners
-        .map((c) => Offset(c.dx * size.width, c.dy * size.height))
-        .toList();
+    final points =
+        corners
+            .map((c) => Offset(c.dx * size.width, c.dy * size.height))
+            .toList();
     final path = Path()..moveTo(points[0].dx, points[0].dy);
     for (final point in points.skip(1)) {
       path.lineTo(point.dx, point.dy);
