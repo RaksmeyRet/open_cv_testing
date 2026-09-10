@@ -791,8 +791,7 @@ class _KhemraScannerScreenState extends State<KhemraScannerScreen>
                     frameHeightLimit,
                     math.max(
                       math.min(minimumFrameHeight, frameHeightLimit),
-                      cameraAreaHeight *
-                          (isScreenLandscape ? 0.84 : 0.705),
+                      cameraAreaHeight * (isScreenLandscape ? 0.84 : 0.705),
                     ),
                   );
                   final frameWidth = frameHeight * frameAspectRatio;
