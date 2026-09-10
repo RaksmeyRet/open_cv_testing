@@ -770,18 +770,17 @@ class _KhemraScannerScreenState extends State<KhemraScannerScreen>
                       constraints.maxWidth > constraints.maxHeight;
                   final headerHeight = isScreenLandscape ? 82.0 : 104.0;
                   final controlsHeight = isScreenLandscape ? 100.0 : 118.0;
-                    final frameAspectRatio =
-                      _isDeviceLandscape ? 0.592 : 1.586;
+                  final frameAspectRatio = _isDeviceLandscape ? 0.592 : 1.586;
                   final cameraAreaHeight =
                       constraints.maxHeight - headerHeight - controlsHeight;
                   final sidePanelWidth = isScreenLandscape ? 112.0 : 0.0;
                   final availableWidth =
                       constraints.maxWidth - sidePanelWidth * 2;
-                  final maxFrameWidth = isScreenLandscape
-                      ? availableWidth * 0.92
-                      : constraints.maxWidth * 0.97;
-                  final maxFrameHeight =
-                      maxFrameWidth / frameAspectRatio;
+                  final maxFrameWidth =
+                      isScreenLandscape
+                          ? availableWidth * 0.92
+                          : constraints.maxWidth * 0.97;
+                  final maxFrameHeight = maxFrameWidth / frameAspectRatio;
                   const minimumFrameHeight = 160.0;
                   final frameHeightLimit = math.max(
                     1.0,
@@ -797,10 +796,10 @@ class _KhemraScannerScreenState extends State<KhemraScannerScreen>
                   final frameWidth = frameHeight * frameAspectRatio;
                   final frameRect = Rect.fromCenter(
                     center: Offset(
-                        isScreenLandscape
+                      isScreenLandscape
                           ? sidePanelWidth + availableWidth / 2
                           : constraints.maxWidth / 2,
-                        isScreenLandscape
+                      isScreenLandscape
                           ? constraints.maxHeight / 2
                           : headerHeight + cameraAreaHeight / 2,
                     ),
