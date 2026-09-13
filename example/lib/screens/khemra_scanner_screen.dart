@@ -272,7 +272,7 @@ class _KhemraScannerScreenState extends State<KhemraScannerScreen>
     with SingleTickerProviderStateMixin, WidgetsBindingObserver {
   static const String _ocrBaseUrl = String.fromEnvironment(
     'OCR_BASE_URL',
-    defaultValue: 'http://192.168.1.242:8212',
+    defaultValue: 'http://157.245.49.153:8212',
   );
 
   final List<TextEditingController> _controllers = List.generate(
@@ -1060,9 +1060,26 @@ class _KhemraScannerScreenState extends State<KhemraScannerScreen>
           const Icon(Icons.error_outline, color: Color(0xFFE53935)),
           const SizedBox(width: 8),
           Expanded(
-            child: Text(
-              _errorMessage!,
-              style: const TextStyle(color: Color(0xFFE53935)),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  _errorMessage!,
+                  style: const TextStyle(color: Color(0xFFE53935)),
+                ),
+                if (_frontImage != null) ...[
+                  const SizedBox(height: 8),
+                  TextButton.icon(
+                    onPressed: _isPicking ? null : () => _runOcr(_frontImage!),
+                    icon: const Icon(Icons.refresh_rounded),
+                    label: const Text('Try OCR again'),
+                    style: TextButton.styleFrom(
+                      foregroundColor: const Color(0xFF092469),
+                      padding: EdgeInsets.zero,
+                    ),
+                  ),
+                ],
+              ],
             ),
           ),
         ],

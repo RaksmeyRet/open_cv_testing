@@ -140,20 +140,22 @@ bool IdCardCropper::findCorners(
     const cv::Mat closingKernel =
         cv::getStructuringElement(
             cv::MORPH_RECT,
-            cv::Size(3, 3));
+            cv::Size(5, 5));
 
     cv::dilate(
         edged,
         edged,
         closingKernel,
         cv::Point(-1, -1),
-        1);
+        2);
 
     cv::morphologyEx(
         edged,
         edged,
         cv::MORPH_CLOSE,
-        closingKernel);
+        closingKernel,
+        cv::Point(-1, -1),
+        2);
 
     std::vector<std::vector<cv::Point>> contours;
 
@@ -163,19 +165,61 @@ bool IdCardCropper::findCorners(
         cv::RETR_LIST,
         cv::CHAIN_APPROX_SIMPLE);
 
+    // Keep weak card borders available when the card is close to the camera
+    // or the scene has uneven lighting.
+    cv::Mat softEdges;
+    cv::Canny(blurred, softEdges, 30.0, 90.0);
+    cv::dilate(
+        softEdges,
+        softEdges,
+        closingKernel,
+        cv::Point(-1, -1),
+        1);
+    cv::morphologyEx(
+        softEdges,
+        softEdges,
+        cv::MORPH_CLOSE,
+        closingKernel,
+        cv::Point(-1, -1),
+        1);
+
+    std::vector<std::vector<cv::Point>> softContours;
+    cv::findContours(
+        softEdges,
+        softContours,
+        cv::RETR_LIST,
+        cv::CHAIN_APPROX_SIMPLE);
+    contours.insert(
+        contours.end(),
+        softContours.begin(),
+        softContours.end());
+
+    std::sort(
+        contours.begin(),
+        contours.end(),
+        [](const std::vector<cv::Point> &left,
+           const std::vector<cv::Point> &right)
+        {
+            return cv::contourArea(left) > cv::contourArea(right);
+        });
+
     double bestScore = 0.0;
 
     const double imageArea =
         static_cast<double>(resized.cols) * resized.rows;
 
-    for (const auto &contour : contours)
+    const int maxContoursToCheck =
+        std::min(30, static_cast<int>(contours.size()));
+
+    for (int index = 0; index < maxContoursToCheck; ++index)
     {
+        const auto &contour = contours[index];
         const double area = cv::contourArea(contour);
         const double areaFraction = area / imageArea;
 
         if (
-            areaFraction < 0.03 ||
-            areaFraction > 0.97)
+            areaFraction < 0.01 ||
+            areaFraction > 0.995)
         {
             continue;
         }
