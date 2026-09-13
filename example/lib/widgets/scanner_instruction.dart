@@ -42,9 +42,10 @@ class ScannerInstruction extends StatelessWidget {
   Widget build(BuildContext context) {
     final statusColor = _isComplete ? primaryColor : errorColor;
     final statusText = _isComplete ? completeText : incompleteText;
-    final detailText = _isComplete
-        ? 'បានបំពេញ $totalFields/$totalFields មុខរួចរាល់'
-        : 'បានបំពេញ $completedCount/$totalFields មុខ';
+    final detailText =
+        _isComplete
+            ? 'បានបំពេញ $totalFields/$totalFields មុខរួចរាល់'
+            : 'បានបំពេញ $completedCount/$totalFields មុខ';
 
     return Semantics(
       label: '$statusText។ $detailText',
@@ -62,9 +63,7 @@ class ScannerInstruction extends StatelessWidget {
             Row(
               children: [
                 Icon(
-                  _isComplete
-                      ? Icons.check_circle_outline
-                      : Icons.info_outline,
+                  _isComplete ? Icons.check_circle_outline : Icons.info_outline,
                   color: statusColor,
                 ),
                 const SizedBox(width: 8),
@@ -94,10 +93,7 @@ class ScannerInstruction extends StatelessWidget {
               _isComplete || missingLabels.isEmpty
                   ? detailText
                   : '$detailText: ${missingLabels.join(', ')}',
-              style: const TextStyle(
-                fontSize: 14,
-                color: Color(0xFF505050),
-              ),
+              style: const TextStyle(fontSize: 14, color: Color(0xFF505050)),
               maxLines: 3,
               overflow: TextOverflow.clip,
             ),
@@ -115,8 +111,11 @@ class ScannerToolButton extends StatelessWidget {
     required this.label,
     required this.onPressed,
     this.active = false,
-    this.activeColor = const Color(0xFFCF951B),
-    this.inactiveColor = const Color(0xFF505050),
+    this.activeColor = const Color(0xFF66686A),
+    this.inactiveColor = const Color(0xFF66686A),
+    this.labelOnLeft = false,
+    this.buttonSize = 50,
+    this.iconSize = 30,
     super.key,
   });
 
@@ -128,33 +127,44 @@ class ScannerToolButton extends StatelessWidget {
   final bool active;
   final Color activeColor;
   final Color inactiveColor;
+  final bool labelOnLeft;
+  final double buttonSize;
+  final double iconSize;
 
   @override
   Widget build(BuildContext context) {
-    return Column(
+    return Row(
       mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.center,
       children: [
+        if (labelOnLeft) ...[_buildLabel(), const SizedBox(width: 8)],
         IconButton(
           tooltip: label,
           onPressed: onPressed,
           icon: Icon(icon),
-          iconSize: 30,
+          iconSize: iconSize,
           color: Colors.white,
           style: IconButton.styleFrom(
             backgroundColor: active ? activeColor : inactiveColor,
-            fixedSize: const Size(50, 50),
+            fixedSize: Size.square(buttonSize),
           ),
         ),
-        const SizedBox(height: 6),
-        Text(
-          label,
-          style: const TextStyle(
-            color: Colors.white,
-            fontSize: 14,
-            fontWeight: FontWeight.w600,
-          ),
-        ),
+        if (!labelOnLeft) ...[const SizedBox(width: 8), _buildLabel()],
       ],
+    );
+  }
+
+  Widget _buildLabel() {
+    return RotatedBox(
+      quarterTurns: labelOnLeft ? 3 : 1,
+      child: Text(
+        label,
+        style: const TextStyle(
+          color: Colors.white,
+          fontSize: 14,
+          fontWeight: FontWeight.w600,
+        ),
+      ),
     );
   }
 }

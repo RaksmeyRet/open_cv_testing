@@ -1,13 +1,13 @@
 $ErrorActionPreference = 'Stop'
 
-$listenAddress = [System.Net.IPAddress]::Loopback
+$listenAddress = [System.Net.IPAddress]::Any
 $listenPort = 8212
 $targetHost = '157.245.49.153'
 $targetPort = 8212
 
 $listener = [System.Net.Sockets.TcpListener]::new($listenAddress, $listenPort)
 $listener.Start()
-Write-Host "OCR proxy listening on http://127.0.0.1:$listenPort"
+Write-Host "OCR proxy listening on all interfaces at port $listenPort"
 Write-Host "Forwarding to http://${targetHost}:${targetPort}"
 
 try {

@@ -174,7 +174,7 @@ bool IdCardCropper::findCorners(
         const double areaFraction = area / imageArea;
 
         if (
-            areaFraction < 0.03 ||
+            areaFraction < 0.01 ||
             areaFraction > 0.97)
         {
             continue;
@@ -224,16 +224,17 @@ bool IdCardCropper::findCorners(
         const double rectangularity = std::min(
             area / rectangleArea,
             1.0);
-        if (rectangularity < 0.60 || aspectScore < 0.75)
+            if (rectangularity < 0.60 || aspectScore < 0.75)
         {
             continue;
         }
 
-        const double areaScore = std::min(areaFraction / 0.20, 1.0);
+            // Prefer card geometry over large background rectangles.
+            const double areaScore = std::min(areaFraction / 0.10, 1.0);
         const double score =
-            (0.55 * aspectScore) +
-            (0.30 * rectangularity) +
-            (0.15 * areaScore);
+                (0.70 * aspectScore) +
+                (0.25 * rectangularity) +
+                (0.05 * areaScore);
 
         if (score > bestScore)
         {

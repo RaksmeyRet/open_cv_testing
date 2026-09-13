@@ -4,7 +4,15 @@ import '../utils/scanner_utils.dart';
 class TextRecognizer {
   /// Field key lookup table ordered by field index (same order as [IdCardData.defaultFieldLabels]).
   static const List<List<String>> _fieldKeys = [
-    ['idnumber', 'idno', 'identitynumber', 'documentnumber'],
+    [
+      'idnumber',
+      'idno',
+      'idcardnumber',
+      'identitynumber',
+      'identityno',
+      'documentnumber',
+      'cardnumber',
+    ],
     [
       'name',
       'fullname',
@@ -74,12 +82,7 @@ class TextRecognizer {
     Map<String, String> fields,
     Map<String, dynamic> response,
   ) {
-    final rawText = [
-      response['raw_text'],
-      response['rawText'],
-      response['text'],
-      response['ocr_text'],
-    ].whereType<String>().join('\n').toUpperCase();
+    final rawText = _findRawText(response).toUpperCase();
     if (rawText.isEmpty) return;
 
     final normalizedText = rawText.replaceAll(RegExp(r'[^A-Z0-9<]'), '');
@@ -90,8 +93,7 @@ class TextRecognizer {
       fields['idnumber'] = idMatch.group(1)!.replaceAll('O', '0');
     }
 
-    final dateMatch =
-        RegExp(r'([0-9]{6})[0-9][MF]').firstMatch(normalizedText);
+    final dateMatch = RegExp(r'([0-9]{6})[0-9][MF]').firstMatch(normalizedText);
     if (fieldValue(fields, 2).isEmpty && dateMatch != null) {
       fields['dateofbirth'] = ScannerUtils.formatMrzDate(dateMatch.group(1)!);
     }
@@ -130,8 +132,9 @@ class TextRecognizer {
 
   /// Extracts a 9-digit ID number from raw MRZ lines in [value].
   String? findRawMrzId(dynamic value) {
-    if (value is! String) return null;
-    for (final line in value.toUpperCase().split(RegExp(r'\r?\n'))) {
+    final text = _findRawText(value);
+    if (text.isEmpty) return null;
+    for (final line in text.toUpperCase().split(RegExp(r'\r?\n'))) {
       final compact = line.replaceAll(RegExp(r'[^0-9]'), '');
       if (line.contains('<<') && compact.length >= 10) {
         final lastTen = compact.substring(compact.length - 10);
@@ -139,5 +142,37 @@ class TextRecognizer {
       }
     }
     return null;
+  }
+
+  String _findRawText(dynamic value) {
+    final matches = <String>[];
+
+    void visit(dynamic child, [String? key]) {
+      if (child is String) {
+        final normalizedKey = ScannerUtils.normalizeKey(key ?? '');
+        if (key == null ||
+            normalizedKey == 'rawtext' ||
+            normalizedKey == 'ocrtext' ||
+            normalizedKey == 'text') {
+          final text = child.trim();
+          if (text.isNotEmpty) matches.add(text);
+        }
+        return;
+      }
+      if (child is Map) {
+        child.forEach((childKey, nested) {
+          visit(nested, '$childKey');
+        });
+        return;
+      }
+      if (child is List) {
+        for (final nested in child) {
+          visit(nested, key);
+        }
+      }
+    }
+
+    visit(value);
+    return matches.join('\n');
   }
 }

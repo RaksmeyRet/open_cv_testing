@@ -39,7 +39,7 @@ Future<Uint8List> _cropImageInBackground(Map<String, dynamic> input) async {
   final source = img.decodeImage(sourceBytes);
   if (source == null) throw Exception('Unsupported image');
 
-  final image = img.bakeOrientation(source);
+  final image = img.copyRotate(img.bakeOrientation(source), angle: -90);
   final corners = [
     Offset(values[0], values[1]),
     Offset(values[2], values[3]),
@@ -101,6 +101,7 @@ class ImageCropperController extends GetxController {
 
   final Rxn<img.Image> decodedImage = Rxn<img.Image>();
   final Rxn<Uint8List> sourceBytes = Rxn<Uint8List>();
+  Uint8List? previewBytes;
   final corners = <Offset>[].obs;
   final activeCorner = (-1).obs;
   final isApplying = false.obs;
@@ -120,9 +121,10 @@ class ImageCropperController extends GetxController {
       final bytes = await source.readAsBytes();
       final decoded = img.decodeImage(bytes);
       if (decoded == null) throw Exception('Unsupported image');
-      final image = img.bakeOrientation(decoded);
+      final image = img.copyRotate(img.bakeOrientation(decoded), angle: -90);
       sourceBytes.value = bytes;
       decodedImage.value = image;
+      previewBytes = Uint8List.fromList(img.encodeJpg(image, quality: 85));
       corners.assignAll(_fallbackCorners(image));
       unawaited(_autoDetectCorners(image));
     } catch (err) {
@@ -223,10 +225,13 @@ class KhemraImageCropperScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final navigator = Navigator.of(context);
     final controller = Get.put(
       ImageCropperController(
         source,
-        onComplete: (file) => Navigator.of(context).pop(file),
+        onComplete: (file) {
+          if (navigator.mounted) navigator.pop(file);
+        },
       ),
     );
 
@@ -305,7 +310,11 @@ class KhemraImageCropperScreen extends StatelessWidget {
                         child: Stack(
                           fit: StackFit.expand,
                           children: [
-                            Image.file(source, fit: BoxFit.fill),
+                            Image.memory(
+                              controller.previewBytes!,
+                              fit: BoxFit.fill,
+                              gaplessPlayback: true,
+                            ),
                             CustomPaint(painter: _CropPainter(corners)),
                           ],
                         ),
