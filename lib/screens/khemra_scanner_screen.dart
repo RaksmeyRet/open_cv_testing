@@ -1,4 +1,3 @@
-import 'dart:async';
 import 'dart:io';
 import 'dart:math' as math;
 
@@ -7,7 +6,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:get/get.dart';
 import 'package:photo_manager/photo_manager.dart';
-import 'package:sensors_plus/sensors_plus.dart';
 
 import '../image/image_cropper.dart';
 import '../models/id_card_data.dart';
@@ -274,7 +272,7 @@ class _KhemraScannerScreenState extends State<KhemraScannerScreen>
     with SingleTickerProviderStateMixin, WidgetsBindingObserver {
   static const String _ocrBaseUrl = String.fromEnvironment(
     'OCR_BASE_URL',
-    defaultValue: 'http://172.16.10.187:8212',
+    defaultValue: 'http://157.245.49.153:8212',
   );
 
   final List<TextEditingController> _controllers = List.generate(
@@ -287,8 +285,6 @@ class _KhemraScannerScreenState extends State<KhemraScannerScreen>
   bool _isOpeningCamera = false;
   bool _showCamera = false;
   CameraController? _cameraController;
-  StreamSubscription<AccelerometerEvent>? _accelerometerSubscription;
-  bool _isDeviceLandscape = false;
   String? _errorMessage;
   late final AnimationController _reloadController;
 
@@ -302,9 +298,6 @@ class _KhemraScannerScreenState extends State<KhemraScannerScreen>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    _accelerometerSubscription = accelerometerEventStream().listen(
-      _handleAccelerometer,
-    );
     _ocrService = OcrService(baseUrl: _ocrBaseUrl);
     _reloadController = AnimationController(
       vsync: this,
@@ -320,7 +313,6 @@ class _KhemraScannerScreenState extends State<KhemraScannerScreen>
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
-    _accelerometerSubscription?.cancel();
     _reloadController.dispose();
     _cameraController?.dispose();
     for (final controller in _controllers) {
@@ -332,17 +324,6 @@ class _KhemraScannerScreenState extends State<KhemraScannerScreen>
   @override
   void didChangeMetrics() {
     if (mounted) setState(() {});
-  }
-
-  void _handleAccelerometer(AccelerometerEvent event) {
-    final horizontalStrength = event.x.abs();
-    final verticalStrength = event.y.abs();
-    final difference = (horizontalStrength - verticalStrength).abs();
-    if (difference < 1.5) return;
-
-    final isLandscape = horizontalStrength > verticalStrength;
-    if (isLandscape == _isDeviceLandscape || !mounted) return;
-    setState(() => _isDeviceLandscape = isLandscape);
   }
 
   void _updateFieldValidation() {
@@ -768,18 +749,15 @@ class _KhemraScannerScreenState extends State<KhemraScannerScreen>
                 builder: (context, constraints) {
                   final isScreenLandscape =
                       constraints.maxWidth > constraints.maxHeight;
-                  final headerHeight = isScreenLandscape ? 82.0 : 104.0;
-                  final controlsHeight = isScreenLandscape ? 100.0 : 118.0;
-                  final frameAspectRatio = _isDeviceLandscape ? 0.592 : 1.586;
+                  final headerHeight = isScreenLandscape ? 78.0 : 104.0;
+                  final controlsHeight = isScreenLandscape ? 118.0 : 118.0;
+                  const frameAspectRatio = 0.592;
                   final cameraAreaHeight =
                       constraints.maxHeight - headerHeight - controlsHeight;
-                  final sidePanelWidth = isScreenLandscape ? 112.0 : 0.0;
-                  final availableWidth =
-                      constraints.maxWidth - sidePanelWidth * 2;
                   final maxFrameWidth =
                       isScreenLandscape
-                          ? availableWidth * 0.92
-                          : constraints.maxWidth * 0.97;
+                          ? constraints.maxWidth * 0.46
+                          : constraints.maxWidth * 0.78;
                   final maxFrameHeight = maxFrameWidth / frameAspectRatio;
                   const minimumFrameHeight = 160.0;
                   final frameHeightLimit = math.max(
@@ -790,18 +768,14 @@ class _KhemraScannerScreenState extends State<KhemraScannerScreen>
                     frameHeightLimit,
                     math.max(
                       math.min(minimumFrameHeight, frameHeightLimit),
-                      cameraAreaHeight * (isScreenLandscape ? 0.84 : 0.705),
+                      cameraAreaHeight * (isScreenLandscape ? 0.78 : 0.62),
                     ),
                   );
                   final frameWidth = frameHeight * frameAspectRatio;
                   final frameRect = Rect.fromCenter(
                     center: Offset(
-                      isScreenLandscape
-                          ? sidePanelWidth + availableWidth / 2
-                          : constraints.maxWidth / 2,
-                      isScreenLandscape
-                          ? constraints.maxHeight / 2
-                          : headerHeight + cameraAreaHeight / 2,
+                      constraints.maxWidth / 2,
+                      headerHeight + cameraAreaHeight / 2,
                     ),
                     width: frameWidth,
                     height: frameHeight,
@@ -816,54 +790,20 @@ class _KhemraScannerScreenState extends State<KhemraScannerScreen>
                         child: const ScannerFrame(),
                       ),
                       SafeArea(
-                        child:
-                            isScreenLandscape
-                                ? Row(
-                                  children: [
-                                    SizedBox(
-                                      width: sidePanelWidth,
-                                      child: RotatedBox(
-                                        quarterTurns: 3,
-                                        child: SizedBox(
-                                          width: constraints.maxHeight,
-                                          child: _buildCameraHeader(
-                                            height: sidePanelWidth,
-                                            isLandscape: true,
-                                          ),
-                                        ),
-                                      ),
-                                    ),
-                                    const Spacer(),
-                                    SizedBox(
-                                      width: sidePanelWidth,
-                                      child: RotatedBox(
-                                        quarterTurns: 1,
-                                        child: SizedBox(
-                                          width: constraints.maxHeight,
-                                          child: _buildCameraControls(
-                                            controller,
-                                            height: sidePanelWidth,
-                                            isLandscape: true,
-                                          ),
-                                        ),
-                                      ),
-                                    ),
-                                  ],
-                                )
-                                : Column(
-                                  children: [
-                                    _buildCameraHeader(
-                                      height: headerHeight,
-                                      isLandscape: false,
-                                    ),
-                                    const Spacer(),
-                                    _buildCameraControls(
-                                      controller,
-                                      height: controlsHeight,
-                                      isLandscape: false,
-                                    ),
-                                  ],
-                                ),
+                        child: Column(
+                          children: [
+                            _buildCameraHeader(
+                              height: headerHeight,
+                              isLandscape: isScreenLandscape,
+                            ),
+                            const Spacer(),
+                            _buildCameraControls(
+                              controller,
+                              height: controlsHeight,
+                              isLandscape: isScreenLandscape,
+                            ),
+                          ],
+                        ),
                       ),
                     ],
                   );
@@ -922,33 +862,13 @@ class _KhemraScannerScreenState extends State<KhemraScannerScreen>
                     color: Colors.white,
                     fontSize: isLandscape ? 14 : 15,
                     fontWeight: FontWeight.w600,
-                    height: 1.5,
+                    height: 2,
                   ),
                 ),
               ),
             ),
-            Align(
-              alignment: Alignment.centerRight,
-              child: _buildCapturedSideThumbnail(),
-            ),
           ],
         ),
-      ),
-    );
-  }
-
-  Widget _buildCapturedSideThumbnail() {
-    final image = _frontImage;
-
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(4),
-      child: SizedBox(
-        width: 68,
-        height: 44,
-        child:
-            image == null
-                ? Image.asset('assets/id_card.png', fit: BoxFit.cover)
-                : Image.file(image, fit: BoxFit.cover),
       ),
     );
   }
@@ -978,6 +898,9 @@ class _KhemraScannerScreenState extends State<KhemraScannerScreen>
           ScannerToolButton(
             icon: Icons.photo_library_outlined,
             label: 'រូបភាព',
+            labelOnLeft: true,
+            buttonSize: 50,
+            iconSize: 30,
             onPressed: _isPicking ? null : _openGallery,
           ),
           Semantics(
@@ -987,8 +910,8 @@ class _KhemraScannerScreenState extends State<KhemraScannerScreen>
               tooltip: 'Capture ID card',
               onPressed: _isPicking ? null : _takePhoto,
               icon: SizedBox(
-                width: isLandscape ? 68 : 78,
-                height: isLandscape ? 68 : 78,
+                width: 78,
+                height: 78,
                 child: DecoratedBox(
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
@@ -1015,6 +938,8 @@ class _KhemraScannerScreenState extends State<KhemraScannerScreen>
                     ? Icons.flash_on_rounded
                     : Icons.flashlight_on_rounded,
             label: 'ពន្លឺ',
+            buttonSize: 50,
+            iconSize: 30,
             active: isTorchOn,
             onPressed: _isPicking ? null : _toggleFlash,
           ),
@@ -1135,9 +1060,26 @@ class _KhemraScannerScreenState extends State<KhemraScannerScreen>
           const Icon(Icons.error_outline, color: Color(0xFFE53935)),
           const SizedBox(width: 8),
           Expanded(
-            child: Text(
-              _errorMessage!,
-              style: const TextStyle(color: Color(0xFFE53935)),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  _errorMessage!,
+                  style: const TextStyle(color: Color(0xFFE53935)),
+                ),
+                if (_frontImage != null) ...[
+                  const SizedBox(height: 8),
+                  TextButton.icon(
+                    onPressed: _isPicking ? null : () => _runOcr(_frontImage!),
+                    icon: const Icon(Icons.refresh_rounded),
+                    label: const Text('Try OCR again'),
+                    style: TextButton.styleFrom(
+                      foregroundColor: const Color(0xFF092469),
+                      padding: EdgeInsets.zero,
+                    ),
+                  ),
+                ],
+              ],
             ),
           ),
         ],

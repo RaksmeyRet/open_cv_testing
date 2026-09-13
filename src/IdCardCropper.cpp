@@ -140,20 +140,22 @@ bool IdCardCropper::findCorners(
     const cv::Mat closingKernel =
         cv::getStructuringElement(
             cv::MORPH_RECT,
-            cv::Size(3, 3));
+            cv::Size(5, 5));
 
     cv::dilate(
         edged,
         edged,
         closingKernel,
         cv::Point(-1, -1),
-        1);
+        2);
 
     cv::morphologyEx(
         edged,
         edged,
         cv::MORPH_CLOSE,
-        closingKernel);
+        closingKernel,
+        cv::Point(-1, -1),
+        2);
 
     std::vector<std::vector<cv::Point>> contours;
 
@@ -163,19 +165,62 @@ bool IdCardCropper::findCorners(
         cv::RETR_LIST,
         cv::CHAIN_APPROX_SIMPLE);
 
+    // A card can have a weak border when it is close to the camera or under
+    // uneven lighting. Add a softer edge pass so its outer rectangle remains
+    // available to the same geometry checks below.
+    cv::Mat softEdges;
+    cv::Canny(blurred, softEdges, 30.0, 90.0);
+    cv::dilate(
+        softEdges,
+        softEdges,
+        closingKernel,
+        cv::Point(-1, -1),
+        1);
+    cv::morphologyEx(
+        softEdges,
+        softEdges,
+        cv::MORPH_CLOSE,
+        closingKernel,
+        cv::Point(-1, -1),
+        1);
+
+    std::vector<std::vector<cv::Point>> softContours;
+    cv::findContours(
+        softEdges,
+        softContours,
+        cv::RETR_LIST,
+        cv::CHAIN_APPROX_SIMPLE);
+    contours.insert(
+        contours.end(),
+        softContours.begin(),
+        softContours.end());
+
+    std::sort(
+        contours.begin(),
+        contours.end(),
+        [](const std::vector<cv::Point> &left,
+           const std::vector<cv::Point> &right)
+        {
+            return cv::contourArea(left) > cv::contourArea(right);
+        });
+
     double bestScore = 0.0;
 
     const double imageArea =
         static_cast<double>(resized.cols) * resized.rows;
 
-    for (const auto &contour : contours)
+    const int maxContoursToCheck =
+        std::min(30, static_cast<int>(contours.size()));
+
+    for (int index = 0; index < maxContoursToCheck; ++index)
     {
+        const auto &contour = contours[index];
         const double area = cv::contourArea(contour);
         const double areaFraction = area / imageArea;
 
         if (
-            areaFraction < 0.03 ||
-            areaFraction > 0.97)
+            areaFraction < 0.01 ||
+            areaFraction > 0.995)
         {
             continue;
         }
@@ -229,11 +274,12 @@ bool IdCardCropper::findCorners(
             continue;
         }
 
-        const double areaScore = std::min(areaFraction / 0.20, 1.0);
+        // Prefer card geometry over large background rectangles.
+        const double areaScore = std::min(areaFraction / 0.10, 1.0);
         const double score =
-            (0.55 * aspectScore) +
-            (0.30 * rectangularity) +
-            (0.15 * areaScore);
+            (0.70 * aspectScore) +
+            (0.25 * rectangularity) +
+            (0.05 * areaScore);
 
         if (score > bestScore)
         {
