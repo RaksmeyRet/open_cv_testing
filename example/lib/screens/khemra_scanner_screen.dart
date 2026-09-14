@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'dart:math' as math;
+import 'dart:ui';
 
 import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
@@ -284,6 +285,7 @@ class _KhemraScannerScreenState extends State<KhemraScannerScreen>
   bool _isPicking = false;
   bool _isOpeningCamera = false;
   bool _showCamera = false;
+  bool _showSampleGuide = true;
   CameraController? _cameraController;
   String? _errorMessage;
   late final AnimationController _reloadController;
@@ -306,8 +308,8 @@ class _KhemraScannerScreenState extends State<KhemraScannerScreen>
     for (final controller in _controllers) {
       controller.addListener(_updateFieldValidation);
     }
-    _showCamera = true;
-    _openCamera();
+    _showCamera = false;
+    _showSampleGuide = true;
   }
 
   @override
@@ -354,13 +356,13 @@ class _KhemraScannerScreenState extends State<KhemraScannerScreen>
       );
       final controller = CameraController(
         back.isNotEmpty ? back.first : cameras.first,
-        ResolutionPreset.high,
+        ResolutionPreset.veryHigh,
         enableAudio: false,
         imageFormatGroup: ImageFormatGroup.jpeg,
       );
       await controller.initialize();
       if (!mounted) {
-        await controller.dispose();
+        await controller.dispose(); 
         return;
       }
       _cameraController = controller;
@@ -518,8 +520,17 @@ class _KhemraScannerScreenState extends State<KhemraScannerScreen>
   // Build
   // ---------------------------------------------------------------------------
 
+  void _cancelSampleGuide() {
+    setState(() {
+      _showSampleGuide = false;
+      _showCamera = true;
+    });
+    _openCamera();
+  }
+
   @override
   Widget build(BuildContext context) {
+    if (_showSampleGuide) return _buildSampleGuide();
     if (_showCamera) return _buildCameraState();
     return Scaffold(
       backgroundColor: Colors.white,
@@ -538,6 +549,213 @@ class _KhemraScannerScreenState extends State<KhemraScannerScreen>
       ),
       body: SafeArea(
         child: _frontImage == null ? _buildEmptyState() : _buildImagePreview(),
+      ),
+    );
+  }
+
+  // ---------------------------------------------------------------------------
+  // Sample guide state
+  // ---------------------------------------------------------------------------
+
+  Widget _buildSampleGuide() {
+    final screenWidth = MediaQuery.of(context).size.width;
+    final screenHeight = MediaQuery.of(context).size.height;
+    final cardWidth = screenWidth * 0.47;
+    final cardHeight = cardWidth * 1.22;
+    final sampleInset = cardWidth * 0.075;
+    final cardLeft = (screenWidth - cardWidth) / 2;
+    final cardTop = (screenHeight - cardHeight) / 2 + screenHeight * 0.04;
+
+    return Scaffold(
+      backgroundColor: const Color(0xFF05070B),
+      body: Stack(
+        fit: StackFit.expand,
+        children: [
+          Positioned.fill(
+            child: DecoratedBox(
+              decoration: const BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [Color(0xFF181C23), Color(0xFF07090D)],
+                ),
+              ),
+              child: Image.asset(
+                'assets/id_card.png',
+                fit: BoxFit.cover,
+                color: Color(0x99000000),
+                colorBlendMode: BlendMode.darken,
+              ),
+            ),
+          ),
+          Positioned.fill(
+            child: BackdropFilter(
+              filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
+              child: const SizedBox.expand(),
+            ),
+          ),
+          SafeArea(
+            child: Align(
+              alignment: Alignment.topCenter,
+              child: Padding(
+                padding: const EdgeInsets.only(top: 34, left: 24, right: 24),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Text(
+                      'Sample ID card',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 24,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'Use this sample as a guide when taking your ID card photo.',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        color: Colors.white.withValues(alpha: 0.72),
+                        fontSize: 14,
+                        height: 1.4,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+          Positioned(
+            left: cardLeft - cardWidth * 0.09,
+            top: cardTop - cardHeight * 0.06,
+            child: Container(
+              width: cardWidth * 1.18,
+              height: cardHeight * 1.12,
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(28),
+                color: const Color(0x33000000),
+                border: Border.all(color: const Color(0x55FFFFFF)),
+              ),
+            ),
+          ),
+          Positioned(
+            left: cardLeft,
+            top: cardTop,
+            child: Container(
+              width: cardWidth,
+              height: cardHeight,
+              decoration: BoxDecoration(
+                color: const Color(0xFFF4F5F7),
+                borderRadius: BorderRadius.circular(22),
+                border: Border.all(color: const Color(0xFFDBDEE4), width: 1.2),
+                boxShadow: const [
+                  BoxShadow(
+                    color: Color(0x3D000000),
+                    blurRadius: 24,
+                    offset: Offset(0, 18),
+                  ),
+                ],
+              ),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(22),
+                child: Padding(
+                  padding: EdgeInsets.all(sampleInset),
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: const Color(0xFFD3D7DC)),
+                    ),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(11),
+                      child: RotatedBox(
+                        quarterTurns: 1,
+                        child: Image.asset(
+                          'assets/id_card.png',
+                          fit: BoxFit.contain,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+          Positioned(
+            left: cardLeft + cardWidth - 32,
+            top: cardTop + cardHeight - 50,
+            child: GestureDetector(
+              onTap: _cancelSampleGuide,
+              child: Container(
+                width: 34,
+                height: 34,
+                decoration: const BoxDecoration(
+                  color: Color(0xFFF7F7F7),
+                  shape: BoxShape.circle,
+                  boxShadow: [
+                    BoxShadow(
+                      color: Color(0x44000000),
+                      blurRadius: 8,
+                      offset: Offset(0, 3),
+                    ),
+                  ],
+                ),
+                child: const Icon(
+                  Icons.close,
+                  color: Color(0xFFE53935),
+                  size: 21,
+                ),
+              ),
+            ),
+          ),
+          Positioned(
+            left: 0,
+            right: 0,
+            bottom: 0,
+            child: ClipRRect(
+              borderRadius: const BorderRadius.vertical(
+                top: Radius.circular(24),
+              ),
+              child: BackdropFilter(
+                filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+                child: Container(
+                  height: 126,
+                  padding: const EdgeInsets.only(bottom: 18),
+                  decoration: const BoxDecoration(
+                    color: Color(0xDD111418),
+                    border: Border(top: BorderSide(color: Color(0x22FFFFFF))),
+                  ),
+                  child: const Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+                      Icon(
+                        Icons.photo_library_outlined,
+                        color: Color(0x99FFFFFF),
+                        size: 30,
+                      ),
+                      SizedBox(
+                        width: 66,
+                        height: 66,
+                        child: DecoratedBox(
+                          decoration: BoxDecoration(
+                            color: Color(0xFFE8E8E8),
+                            shape: BoxShape.circle,
+                          ),
+                        ),
+                      ),
+                      Icon(
+                        Icons.flashlight_on_outlined,
+                        color: Color(0x99FFFFFF),
+                        size: 30,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -937,7 +1155,8 @@ class _KhemraScannerScreenState extends State<KhemraScannerScreen>
                 isTorchOn
                     ? Icons.flash_on_rounded
                     : Icons.flashlight_on_rounded,
-            label: 'ពន្លឺ',
+            label: 'ពិល',
+            labelOnLeft: true,
             buttonSize: 50,
             iconSize: 30,
             active: isTorchOn,

@@ -53,10 +53,9 @@ Future<Uint8List> _cropImageInBackground(Map<String, dynamic> input) async {
   final rightHeight = (corners[2].dy - corners[1].dy).abs() * image.height;
   final cropWidth = math.max(1, math.max(topWidth, bottomWidth));
   final cropHeight = math.max(1, math.max(leftHeight, rightHeight));
-  final outputScale = math.min(
-    1.0,
-    math.min(1600 / cropWidth, 1000 / cropHeight),
-  );
+  // OCR is much more reliable when the ID text is presented at a stable
+  // resolution, especially when the card occupies only part of the photo.
+  final outputScale = math.min(2200 / cropWidth, 1387 / cropHeight);
   final outputWidth = math.max(1, (cropWidth * outputScale).round());
   final outputHeight = math.max(1, (cropHeight * outputScale).round());
 
@@ -85,7 +84,7 @@ Future<Uint8List> _cropImageInBackground(Map<String, dynamic> input) async {
       numChannels: 3,
     ),
   );
-  return Uint8List.fromList(img.encodeJpg(result, quality: 92));
+  return Uint8List.fromList(img.encodeJpg(result, quality: 97));
 }
 
 // ---------------------------------------------------------------------------

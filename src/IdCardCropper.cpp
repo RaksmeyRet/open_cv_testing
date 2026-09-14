@@ -217,9 +217,9 @@ bool IdCardCropper::findCorners(
         const double area = cv::contourArea(contour);
         const double areaFraction = area / imageArea;
 
-        if (
-            areaFraction < 0.01 ||
-            areaFraction > 0.995)
+            if (
+                areaFraction < 0.015 ||
+                areaFraction > 0.35)
         {
             continue;
         }
@@ -273,11 +273,14 @@ bool IdCardCropper::findCorners(
             continue;
         }
 
-        const double areaScore = std::min(areaFraction / 0.20, 1.0);
-        const double score =
-            (0.55 * aspectScore) +
-            (0.30 * rectangularity) +
-            (0.15 * areaScore);
+            const double expectedAreaFraction = 0.08;
+            const double areaScore = std::max(
+                0.0,
+                1.0 - std::abs(areaFraction - expectedAreaFraction) / 0.14);
+            const double score =
+                (0.65 * aspectScore) +
+                (0.20 * rectangularity) +
+                (0.15 * areaScore);
 
         if (score > bestScore)
         {
