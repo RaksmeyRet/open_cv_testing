@@ -362,7 +362,7 @@ class _KhemraScannerScreenState extends State<KhemraScannerScreen>
       );
       await controller.initialize();
       if (!mounted) {
-        await controller.dispose(); 
+        await controller.dispose();
         return;
       }
       _cameraController = controller;
