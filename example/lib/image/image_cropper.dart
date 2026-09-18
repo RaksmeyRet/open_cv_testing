@@ -13,6 +13,25 @@ import 'package:path_provider/path_provider.dart';
 // Background isolate helpers
 // ---------------------------------------------------------------------------
 
+// Keep a single, consistent working orientation: landscape for card detection.
+// This matches the user flow: rotate to standing first, then detect and let
+// the user fine-tune the corners.
+
+img.Image _prepareStandingImage(img.Image image) {
+  final oriented = img.bakeOrientation(image);
+  if (oriented.width < oriented.height) {
+    final rotated = img.copyRotate(oriented, angle: -90);
+    if (rotated.width > 0 && rotated.height > 0) {
+      return rotated;
+    }
+  }
+  return oriented;
+}
+
+img.Image _normalizeWorkingImage(img.Image image) {
+  return _prepareStandingImage(image);
+}
+
 /// Runs native corner detection off the UI isolate.
 List<double>? _detectCornersInBackground(Map<String, dynamic> input) {
   final rgba = input['rgba'] as Uint8List;
@@ -39,7 +58,8 @@ Future<Uint8List> _cropImageInBackground(Map<String, dynamic> input) async {
   final source = img.decodeImage(sourceBytes);
   if (source == null) throw Exception('Unsupported image');
 
-  final image = img.copyRotate(img.bakeOrientation(source), angle: -90);
+  // The input bytes were normalized in _loadImage(). Do not rotate again.
+  final image = img.bakeOrientation(source);
   final corners = [
     Offset(values[0], values[1]),
     Offset(values[2], values[3]),
@@ -53,9 +73,10 @@ Future<Uint8List> _cropImageInBackground(Map<String, dynamic> input) async {
   final rightHeight = (corners[2].dy - corners[1].dy).abs() * image.height;
   final cropWidth = math.max(1, math.max(topWidth, bottomWidth));
   final cropHeight = math.max(1, math.max(leftHeight, rightHeight));
-  // OCR is much more reliable when the ID text is presented at a stable
-  // resolution, especially when the card occupies only part of the photo.
-  final outputScale = math.min(2200 / cropWidth, 1387 / cropHeight);
+  final outputScale = math.min(
+    1.0,
+    math.min(1600 / cropWidth, 1000 / cropHeight),
+  );
   final outputWidth = math.max(1, (cropWidth * outputScale).round());
   final outputHeight = math.max(1, (cropHeight * outputScale).round());
 
@@ -84,16 +105,78 @@ Future<Uint8List> _cropImageInBackground(Map<String, dynamic> input) async {
       numChannels: 3,
     ),
   );
-  return Uint8List.fromList(img.encodeJpg(result, quality: 97));
+  return Uint8List.fromList(img.encodeJpg(result, quality: 92));
 }
 
 // ---------------------------------------------------------------------------
 // GetX controller
 // ---------------------------------------------------------------------------
 
+List<Offset> normalizeCardCorners(List<Offset> corners) {
+  if (corners.length != 4) return List<Offset>.from(corners);
+
+  final centerX = corners.map((c) => c.dx).reduce((a, b) => a + b) / 4;
+  final centerY = corners.map((c) => c.dy).reduce((a, b) => a + b) / 4;
+
+  final orderedByAngle = List<Offset>.from(corners)..sort((a, b) {
+    final angleA = math.atan2(a.dy - centerY, a.dx - centerX);
+    final angleB = math.atan2(b.dy - centerY, b.dx - centerX);
+    return angleA.compareTo(angleB);
+  });
+
+  final topLeft = orderedByAngle.reduce((best, current) {
+    final bestScore = best.dx + best.dy;
+    final currentScore = current.dx + current.dy;
+    return currentScore < bestScore ? current : best;
+  });
+
+  final startIndex = orderedByAngle.indexOf(topLeft);
+  final rotated = <Offset>[];
+  for (var i = 0; i < 4; i++) {
+    rotated.add(orderedByAngle[(startIndex + i) % 4]);
+  }
+
+  return rotated;
+}
+
 /// Controller for the four-corner crop screen.
 class ImageCropperController extends GetxController {
   ImageCropperController(this.source, {required this.onComplete});
+
+  static List<Offset> convertDetectedCornersToSource({
+    required List<double> normalizedCorners,
+    required int detectionWidth,
+    required int detectionHeight,
+    required int candidateWidth,
+    required int candidateHeight,
+    required int offsetX,
+    required int offsetY,
+    required int sourceWidth,
+    required int sourceHeight,
+  }) {
+    if (normalizedCorners.length != 8) {
+      return const <Offset>[];
+    }
+
+    if (detectionWidth <= 0 || detectionHeight <= 0) {
+      return const <Offset>[];
+    }
+
+    final scaleX = candidateWidth / detectionWidth;
+    final scaleY = candidateHeight / detectionHeight;
+
+    final corners = <Offset>[];
+    for (var i = 0; i < 4; i++) {
+      final rawX = normalizedCorners[i * 2];
+      final rawY = normalizedCorners[i * 2 + 1];
+      final localX = rawX * detectionWidth;
+      final localY = rawY * detectionHeight;
+      final mappedX = offsetX + (localX * scaleX);
+      final mappedY = offsetY + (localY * scaleY);
+      corners.add(Offset(mappedX / sourceWidth, mappedY / sourceHeight));
+    }
+    return corners;
+  }
 
   final File source;
   final ValueChanged<File> onComplete;
@@ -106,8 +189,51 @@ class ImageCropperController extends GetxController {
   final isApplying = false.obs;
   final isDetecting = false.obs;
   final error = RxnString();
+  bool _autoDetectStarted = false;
 
   static const double _idCardAspectRatio = 1.586;
+
+  static List<Offset> _normalizeDetectedCorners(List<Offset> corners) {
+    return normalizeCardCorners(corners);
+  }
+
+  static bool _looksLikeCard(List<Offset> corners) {
+    if (corners.length != 4) return false;
+
+    final topWidth = (corners[1].dx - corners[0].dx).abs();
+    final bottomWidth = (corners[2].dx - corners[3].dx).abs();
+    final leftHeight = (corners[3].dy - corners[0].dy).abs();
+    final rightHeight = (corners[2].dy - corners[1].dy).abs();
+
+    final width = math.max(topWidth, bottomWidth);
+    final height = math.max(leftHeight, rightHeight);
+
+    if (width <= 0.08 || height <= 0.06) return false;
+
+    final ratio = width / height;
+    final expectedRatio = 1.586;
+    final ratioDelta = (ratio - expectedRatio).abs();
+    return ratioDelta <= 0.6;
+  }
+
+  static bool _looksLikeFarCard(List<Offset> corners) {
+    if (corners.length != 4) return false;
+
+    final topWidth = (corners[1].dx - corners[0].dx).abs();
+    final bottomWidth = (corners[2].dx - corners[3].dx).abs();
+    final leftHeight = (corners[3].dy - corners[0].dy).abs();
+    final rightHeight = (corners[2].dy - corners[1].dy).abs();
+
+    final width = math.max(topWidth, bottomWidth);
+    final height = math.max(leftHeight, rightHeight);
+
+    if (width <= 0.03 || height <= 0.03) return false;
+
+    final ratio = width / height;
+    final expectedRatio = 1.586;
+    final ratioDelta = (ratio - expectedRatio).abs();
+    return ratioDelta <= 1.15;
+  }
 
   @override
   void onInit() {
@@ -120,57 +246,197 @@ class ImageCropperController extends GetxController {
       final bytes = await source.readAsBytes();
       final decoded = img.decodeImage(bytes);
       if (decoded == null) throw Exception('Unsupported image');
-      final image = img.copyRotate(img.bakeOrientation(decoded), angle: -90);
-      sourceBytes.value = bytes;
+
+      final image = _normalizeWorkingImage(decoded);
+      sourceBytes.value = Uint8List.fromList(img.encodeJpg(image, quality: 97));
       decodedImage.value = image;
       previewBytes = Uint8List.fromList(img.encodeJpg(image, quality: 85));
       corners.assignAll(_fallbackCorners(image));
-      unawaited(_autoDetectCorners(image));
+      if (!_autoDetectStarted) {
+        _autoDetectStarted = true;
+        unawaited(_autoDetectCorners(image));
+      }
     } catch (err) {
       error.value = 'Could not load image: $err';
     }
   }
 
   Future<void> _autoDetectCorners(img.Image image) async {
+    if (_autoDetectStarted == false) {
+      _autoDetectStarted = true;
+    }
     isDetecting.value = true;
     try {
-      const detectionWidth = 960;
-      final detectionImage =
+      // Match the native local_ocr.cpp detector: target width is 1000 px.
+      const detectionWidth = 1000;
+      final strictCandidates =
+          <
+            ({
+              img.Image image,
+              int offsetX,
+              int offsetY,
+              int sourceWidth,
+              int sourceHeight,
+            })
+          >[];
+      final relaxedCandidates =
+          <
+            ({
+              img.Image image,
+              int offsetX,
+              int offsetY,
+              int sourceWidth,
+              int sourceHeight,
+            })
+          >[];
+
+      final baseImage =
           image.width > detectionWidth
               ? img.copyResize(image, width: detectionWidth)
               : image;
-      final values = await compute(_detectCornersInBackground, {
-        'rgba': detectionImage.getBytes(order: img.ChannelOrder.rgba),
-        'width': detectionImage.width,
-        'height': detectionImage.height,
-        'originalWidth': detectionImage.width,
-        'originalHeight': detectionImage.height,
-      });
-      if (values == null) return;
-      corners.assignAll([
-        Offset(values[0], values[1]),
-        Offset(values[2], values[3]),
-        Offset(values[4], values[5]),
-        Offset(values[6], values[7]),
-      ]);
+      strictCandidates.add((
+        image: baseImage,
+        offsetX: 0,
+        offsetY: 0,
+        sourceWidth: image.width,
+        sourceHeight: image.height,
+      ));
+
+      // Keep a high-resolution full-frame pass so cards near the edge are not
+      // excluded by the centered crop.
+      if (image.width > detectionWidth) {
+        strictCandidates.add((
+          image: img.copyResize(image, width: detectionWidth * 2),
+          offsetX: 0,
+          offsetY: 0,
+          sourceWidth: image.width,
+          sourceHeight: image.height,
+        ));
+      }
+
+      final centeredCropWidth = (image.width * .88).round();
+      final centeredCropHeight = (image.height * .88).round();
+      final centeredCropX = ((image.width - centeredCropWidth) / 2).round();
+      final centeredCropY = ((image.height - centeredCropHeight) / 2).round();
+      final centeredImage = img.copyCrop(
+        image,
+        x: centeredCropX,
+        y: centeredCropY,
+        width: centeredCropWidth,
+        height: centeredCropHeight,
+      );
+      strictCandidates.add((
+        image: centeredImage,
+        offsetX: centeredCropX,
+        offsetY: centeredCropY,
+        sourceWidth: image.width,
+        sourceHeight: image.height,
+      ));
+
+      final farCropWidth = (image.width * .95).round();
+      final farCropHeight = (image.height * .95).round();
+      final farCropX = ((image.width - farCropWidth) / 2).round();
+      final farCropY = ((image.height - farCropHeight) / 2).round();
+      final farImage = img.copyCrop(
+        image,
+        x: farCropX,
+        y: farCropY,
+        width: farCropWidth,
+        height: farCropHeight,
+      );
+      relaxedCandidates.add((
+        image: farImage,
+        offsetX: farCropX,
+        offsetY: farCropY,
+        sourceWidth: image.width,
+        sourceHeight: image.height,
+      ));
+
+      for (final candidate in strictCandidates) {
+        final values = await _detectFromCandidate(candidate);
+        if (values == null) continue;
+
+        final normalized = _normalizeDetectedCorners(values);
+        if (_looksLikeCard(normalized)) {
+          corners.assignAll(normalized);
+          return;
+        }
+      }
+
+      for (final candidate in relaxedCandidates) {
+        final values = await _detectFromCandidate(candidate);
+        if (values == null) continue;
+
+        final normalized = _normalizeDetectedCorners(values);
+        if (_looksLikeFarCard(normalized)) {
+          corners.assignAll(normalized);
+          return;
+        }
+      }
+
+      // Final fallback remains conservative and centered, so the user can still
+      // fine-tune a valid crop instead of getting a totally wrong rectangle.
+      corners.assignAll(_fallbackCorners(image));
     } catch (err) {
       debugPrint('Auto-detect corners failed: $err');
+      corners.assignAll(_fallbackCorners(image));
     } finally {
       isDetecting.value = false;
     }
   }
 
   List<Offset> _fallbackCorners(img.Image image) {
-    const horizontalPadding = .08;
-    final width = 1 - (horizontalPadding * 2);
+    // Default fallback stays centered and compact for near shots. The relaxed
+    // pass handles distant cards separately, so we do not over-broaden the
+    // normal crop selection and accidentally clip the actual card border.
+    const width = .46;
     final height = width * image.width / image.height / _idCardAspectRatio;
+    final left = (1 - width) / 2;
     final top = ((1 - height) / 2).clamp(.02, .98 - height);
     return [
-      Offset(horizontalPadding, top),
-      Offset(1 - horizontalPadding, top),
-      Offset(1 - horizontalPadding, top + height),
-      Offset(horizontalPadding, top + height),
+      Offset(left, top),
+      Offset(left + width, top),
+      Offset(left + width, top + height),
+      Offset(left, top + height),
     ];
+  }
+
+  Future<List<Offset>?> _detectFromCandidate(
+    ({
+      img.Image image,
+      int offsetX,
+      int offsetY,
+      int sourceWidth,
+      int sourceHeight,
+    })
+    candidate,
+  ) async {
+    final detectionImage =
+        candidate.image.width <= 1000
+            ? candidate.image
+            : img.copyResize(candidate.image, width: 1000);
+
+    final values = await compute(_detectCornersInBackground, {
+      'rgba': detectionImage.getBytes(order: img.ChannelOrder.rgba),
+      'width': detectionImage.width,
+      'height': detectionImage.height,
+      'originalWidth': detectionImage.width,
+      'originalHeight': detectionImage.height,
+    });
+
+    if (values == null) return null;
+
+    return convertDetectedCornersToSource(
+      normalizedCorners: values,
+      detectionWidth: detectionImage.width,
+      detectionHeight: detectionImage.height,
+      candidateWidth: candidate.image.width,
+      candidateHeight: candidate.image.height,
+      offsetX: candidate.offsetX,
+      offsetY: candidate.offsetY,
+      sourceWidth: candidate.sourceWidth,
+      sourceHeight: candidate.sourceHeight,
+    );
   }
 
   /// Applies the crop and pops the route with the resulting [File].
@@ -232,6 +498,7 @@ class KhemraImageCropperScreen extends StatelessWidget {
           if (navigator.mounted) navigator.pop(file);
         },
       ),
+      tag: source.path,
     );
 
     return Obx(() {

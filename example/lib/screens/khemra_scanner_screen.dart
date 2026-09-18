@@ -6,6 +6,8 @@ import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:get/get.dart';
+import 'package:image/image.dart' as img;
+import 'package:path_provider/path_provider.dart';
 import 'package:photo_manager/photo_manager.dart';
 
 import '../image/image_cropper.dart';
@@ -396,11 +398,12 @@ class _KhemraScannerScreenState extends State<KhemraScannerScreen>
         return;
       }
 
+      final standingFile = await _ensureStandingImage(croppedFile);
       setState(() {
-        _frontImage = croppedFile;
+        _frontImage = standingFile;
         _showCamera = false;
       });
-      await _runOcr(croppedFile);
+      await _runOcr(standingFile);
     } catch (error) {
       if (mounted) {
         setState(() => _errorMessage = 'Could not take photo: $error');
@@ -449,12 +452,13 @@ class _KhemraScannerScreenState extends State<KhemraScannerScreen>
       return;
     }
 
+    final standingFile = await _ensureStandingImage(croppedFile);
     setState(() {
-      _frontImage = croppedFile;
+      _frontImage = standingFile;
       _errorMessage = null;
       _showCamera = false;
     });
-    await _runOcr(croppedFile);
+    await _runOcr(standingFile);
   }
 
   Future<File?> _cropImage(File source) {
@@ -463,6 +467,28 @@ class _KhemraScannerScreenState extends State<KhemraScannerScreen>
         builder: (_) => KhemraImageCropperScreen(source: source),
       ),
     );
+  }
+
+  Future<File> _ensureStandingImage(File imageFile) async {
+    try {
+      final bytes = await imageFile.readAsBytes();
+      final decoded = img.decodeImage(bytes);
+      if (decoded == null) return imageFile;
+
+      var oriented = img.bakeOrientation(decoded);
+      if (oriented.height > oriented.width) {
+        oriented = img.copyRotate(oriented, angle: 90);
+      }
+
+      final directory = await getTemporaryDirectory();
+      final rotatedFile = File(
+        '${directory.path}/standing_${DateTime.now().millisecondsSinceEpoch}.jpg',
+      );
+      await rotatedFile.writeAsBytes(img.encodeJpg(oriented, quality: 92));
+      return rotatedFile;
+    } catch (_) {
+      return imageFile;
+    }
   }
 
   // ---------------------------------------------------------------------------

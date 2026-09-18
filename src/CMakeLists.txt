@@ -1,5 +1,9 @@
 cmake_minimum_required(VERSION 3.10)
 project(native_opencv LANGUAGES CXX C)
+ 
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS OFF)
 
 # The Android/iOS build systems will pass the OpenCV_DIR variable
 find_package(OpenCV REQUIRED)
@@ -7,7 +11,7 @@ find_package(OpenCV REQUIRED)
 add_library(native_opencv SHARED
     native_opencv.cpp
     BlurDetector.cpp
-    IdCardCropper.cpp
+    local_ocr.cpp
 )
 
 # Link OpenCV and the NDK's libc++ to your shared library

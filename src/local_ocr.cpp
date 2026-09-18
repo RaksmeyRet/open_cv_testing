@@ -27,6 +27,7 @@ using namespace std;
 const string IMAGE_PATH = "D:\\ID_CARD_SCAN\\TEST\\idcard.jpg";
 const string OUTPUT_FOLDER = "D:\\ID_CARD_SCAN\\TEST\\output\\";
 const double CR80_RATIO = 85.6 / 54.0;
+const int DETECTION_WIDTH = 1600;
 
 // ============================================================
 // MRZ PARSER STRUCTURES & FUNCTIONS
@@ -476,23 +477,24 @@ vector<Point> sortCorners(const vector<Point>& corners)
 {
     vector<Point> result;
     if (corners.size() != 4) return result;
-    vector<Point> pts = corners;
-    Point2f center(0.0f, 0.0f);
-    for (const Point& p : pts) { center.x += p.x; center.y += p.y; }
-    center.x /= 4.0f; center.y /= 4.0f;
 
-    sort(pts.begin(), pts.end(), [&center](const Point& a, const Point& b) {
-        double angleA = atan2(a.y - center.y, a.x - center.x);
-        double angleB = atan2(b.y - center.y, b.x - center.x);
-        return angleA < angleB;
+    // Sum/difference ordering is stable for tilted rectangles and does not
+    // assume exactly two points lie above the centroid.
+    auto topLeft = min_element(corners.begin(), corners.end(), [](const Point& a, const Point& b) {
+        return (a.x + a.y) < (b.x + b.y);
+    });
+    auto bottomRight = max_element(corners.begin(), corners.end(), [](const Point& a, const Point& b) {
+        return (a.x + a.y) < (b.x + b.y);
     });
 
-    int topLeftIndex = 0; double smallestValue = DBL_MAX;
-    for (int i = 0; i < 4; i++) {
-        double value = static_cast<double>(pts[i].x) + static_cast<double>(pts[i].y);
-        if (value < smallestValue) { smallestValue = value; topLeftIndex = i; }
-    }
-    for (int i = 0; i < 4; i++) result.push_back(pts[(topLeftIndex + i) % 4]);
+    auto topRight = min_element(corners.begin(), corners.end(), [](const Point& a, const Point& b) {
+        return (a.y - a.x) < (b.y - b.x);
+    });
+    auto bottomLeft = max_element(corners.begin(), corners.end(), [](const Point& a, const Point& b) {
+        return (a.y - a.x) < (b.y - b.x);
+    });
+
+    result = {*topLeft, *topRight, *bottomRight, *bottomLeft};
     return result;
 }
 
@@ -561,11 +563,12 @@ bool detectIDCard(const Mat& image, vector<Point>& bestCorners, double& bestScor
     cout << "========================================" << endl;
     createOutputFolder();
 
-    int targetWidth = 1000;
-    double scale = static_cast<double>(targetWidth) / image.cols;
+    // Keep more pixels for distant cards; the contour detector is still
+    // bounded by the camera image size and the candidate filters below.
+    double scale = static_cast<double>(DETECTION_WIDTH) / image.cols;
 
     Mat resized;
-    resize(image, resized, Size(targetWidth, static_cast<int>(image.rows * scale)));
+    resize(image, resized, Size(DETECTION_WIDTH, static_cast<int>(image.rows * scale)));
     saveImage("01_original.jpg", resized);
 
     Mat gray;
@@ -588,45 +591,107 @@ bool detectIDCard(const Mat& image, vector<Point>& bestCorners, double& bestScor
     Canny(blurImage, edges, lower, upper);
     saveImage("04_canny_edges.jpg", edges);
 
-    Mat kernel = getStructuringElement(MORPH_RECT, Size(5, 5));
+    // Large morphology kernels merge the card border into the table/background.
+    // Keep the edge map detailed enough to retain the small card rectangle.
+    Mat kernel = getStructuringElement(MORPH_RECT, Size(3, 3));
     Mat dilated;
-    dilate(edges, dilated, kernel, Point(-1, -1), 2);
+    dilate(edges, dilated, kernel, Point(-1, -1), 1);
     Mat closed;
-    morphologyEx(dilated, closed, MORPH_CLOSE, kernel, Point(-1, -1), 2);
+    morphologyEx(dilated, closed, MORPH_CLOSE, kernel, Point(-1, -1), 1);
     saveImage("05_closed_edges.jpg", closed);
 
     vector<vector<Point>> contours;
     findContours(closed, contours, RETR_LIST, CHAIN_APPROX_SIMPLE);
+
+    // A distant card often has a very faint border after JPEG compression,
+    // while a close card can have a partially clipped border. Keep a second,
+    // lower-threshold edge pass so either case still reaches the geometry
+    // checks below.
+    Mat softEdges;
+    Canny(blurImage, softEdges, 25, 80);
+    dilate(softEdges, softEdges, kernel, Point(-1, -1), 1);
+    morphologyEx(softEdges, softEdges, MORPH_CLOSE, kernel, Point(-1, -1), 1);
+
+    vector<vector<Point>> softContours;
+    findContours(softEdges, softContours, RETR_LIST, CHAIN_APPROX_SIMPLE);
+    contours.insert(contours.end(), softContours.begin(), softContours.end());
+
     double imageArea = static_cast<double>(resized.rows * resized.cols);
     bestScore = 0.0;
     bestCorners.clear();
     bool found = false;
 
-    sort(contours.begin(), contours.end(), [](const vector<Point>& a, const vector<Point>& b) { return contourArea(a) > contourArea(b); });
+    sort(contours.begin(), contours.end(), [](const vector<Point>& a, const vector<Point>& b) {
+        return contourArea(a) > contourArea(b);
+    });
 
-    for (int idx = 0; idx < min(30, (int)contours.size()); idx++) {
+    for (int idx = 0; idx < min(500, (int)contours.size()); idx++) {
         double area = contourArea(contours[idx]);
         double areaRatio = area / imageArea;
-        if (areaRatio < 0.03 || areaRatio > 0.97) continue;
+        // Distant ID cards appear much smaller in the frame. Keep the filters
+        // tolerant enough to accept them while still rejecting background blobs.
+        if (areaRatio < 0.00012 || areaRatio > 0.90) continue;
+
         vector<Point> hull;
         convexHull(contours[idx], hull);
         double perimeter = arcLength(hull, true);
         if (perimeter <= 0) continue;
+
         vector<Point> approx;
-        approxPolyDP(hull, approx, 0.02 * perimeter, true);
+        approxPolyDP(hull, approx, 0.025 * perimeter, true);
         if (approx.size() != 4 || !isContourConvex(approx)) continue;
+
         vector<Point> ordered = sortCorners(approx);
         if (ordered.size() != 4) continue;
+
+        Rect bounds = boundingRect(ordered);
+        double rectArea = bounds.area();
+        if (rectArea <= 0) continue;
+
+        double centerX = static_cast<double>(bounds.x + bounds.width / 2.0) / resized.cols;
+        double centerY = static_cast<double>(bounds.y + bounds.height / 2.0) / resized.rows;
+        double centerDistance = hypot(centerX - 0.5, centerY - 0.5);
+        if (centerDistance > 0.90) continue;
+
         RotatedRect rect = minAreaRect(ordered);
         double width = rect.size.width, height = rect.size.height;
-        if (width < 1 || height < 1) continue;
+        if (width < 20 || height < 14) continue;
+
         double ratio = max(width, height) / min(width, height);
-        double ratioScore = 1.0 - min(abs(ratio - CR80_RATIO) / CR80_RATIO, 1.0);
-        if (ratioScore > bestScore) {
-            bestScore = ratioScore;
+        double aspectDiff = abs(ratio - CR80_RATIO);
+        if (aspectDiff > 0.80) continue;
+
+        double relativeWidth = width / resized.cols;
+        double relativeHeight = height / resized.rows;
+        if (relativeWidth < 0.008 || relativeWidth > 0.96 ||
+            relativeHeight < 0.008 || relativeHeight > 0.92) continue;
+
+        double edgeCoverage = static_cast<double>(bounds.area()) / static_cast<double>(resized.rows * resized.cols);
+        if (edgeCoverage < 0.001) continue;
+
+        double rectangularity = area / rectArea;
+        if (rectangularity < 0.45) continue;
+
+        double aspectScore = 1.0 - min(aspectDiff / 0.80, 1.0);
+        double coverageScore = 1.0 - min(centerDistance / 0.50, 1.0);
+        // The outer card should be the largest plausible CR80 rectangle. A
+        // target-area score rewarded small text blocks too strongly, which is
+        // why the points could land inside the card instead of on its border.
+        double sizeScore = min(areaRatio / 0.12, 1.0);
+        double rectangularityScore = min((rectangularity - 0.45) / 0.55, 1.0);
+        double score = 0.30 * aspectScore + 0.15 * coverageScore +
+               0.40 * sizeScore + 0.15 * rectangularityScore;
+
+        if (score > bestScore) {
+            bestScore = score;
             bestCorners = ordered;
             found = true;
         }
+    }
+
+    if (found && bestScore < 0.30) {
+        bestCorners.clear();
+        found = false;
     }
 
     Mat detected = resized.clone();
@@ -717,6 +782,41 @@ bool detectIDCard(const Mat& image, vector<Point>& bestCorners, double& bestScor
         saveImage("06_id_card_detection.jpg", detected);
     }
     return found;
+}
+
+extern "C" bool local_ocr_detect_id_card(
+    uint8_t *input_pixels,
+    int width,
+    int height,
+    float *out_corners)
+{
+    if (input_pixels == nullptr || width <= 0 || height <= 0 || out_corners == nullptr)
+    {
+        return false;
+    }
+
+    cv::Mat rgba(height, width, CV_8UC4, input_pixels);
+    cv::Mat bgr;
+    cv::cvtColor(rgba, bgr, cv::COLOR_RGBA2BGR);
+
+    std::vector<cv::Point> corners;
+    double score = 0.0;
+
+    if (!detectIDCard(bgr, corners, score) || corners.size() != 4)
+    {
+        return false;
+    }
+
+    // detectIDCard works on a fixed-width detection image. Convert its result back to
+    // the coordinate space of the RGBA buffer received from Dart.
+    const double detectionScale = static_cast<double>(DETECTION_WIDTH) / width;
+    for (int i = 0; i < 4; ++i)
+    {
+        out_corners[i * 2] = static_cast<float>(corners[i].x / detectionScale);
+        out_corners[i * 2 + 1] = static_cast<float>(corners[i].y / detectionScale);
+    }
+
+    return true;
 }
 
 int main()

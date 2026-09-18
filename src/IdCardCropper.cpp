@@ -268,7 +268,7 @@ bool IdCardCropper::findCorners(
         const double rectangularity = std::min(
             area / rectangleArea,
             1.0);
-        if (rectangularity < 0.60 || aspectScore < 0.75)
+        if (rectangularity < 0.45 || aspectScore < 0.65)
         {
             continue;
         }
@@ -290,7 +290,7 @@ bool IdCardCropper::findCorners(
         }
     }
 
-    return !corners.empty() && bestScore >= 0.75;
+    return !corners.empty() && bestScore >= 0.65;
 }
 
 std::vector<cv::Point2f> IdCardCropper::sortCorners(

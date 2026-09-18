@@ -25,24 +25,6 @@ typedef GetIntC = Int32 Function();
 typedef GetIntDart = int Function();
 
 // ---------------------------------------------------------------------------
-// crop_id_card
-// ---------------------------------------------------------------------------
-typedef CropIdCardC =
-    Bool Function(
-      Pointer<Uint8> inputPixels,
-      Int32 width,
-      Int32 height,
-      Pointer<Uint8> outputPixels,
-    );
-typedef CropIdCardDart =
-    bool Function(
-      Pointer<Uint8> inputPixels,
-      int width,
-      int height,
-      Pointer<Uint8> outputPixels,
-    );
-
-// ---------------------------------------------------------------------------
 // detect_id_card_corners
 // ---------------------------------------------------------------------------
 typedef DetectCornersC =
@@ -81,9 +63,6 @@ class NativeOpencv {
           .lookup<NativeFunction<GetIntC>>('get_id_card_output_height')
           .asFunction();
 
-  static final CropIdCardDart _cropIdCard =
-      _lib.lookup<NativeFunction<CropIdCardC>>('crop_id_card').asFunction();
-
   static final DetectCornersDart _detectCorners =
       _lib
           .lookup<NativeFunction<DetectCornersC>>('detect_id_card_corners')
@@ -113,39 +92,6 @@ class NativeOpencv {
 
   static int get idCardOutputWidth => _getIdCardOutputWidth();
   static int get idCardOutputHeight => _getIdCardOutputHeight();
-
-  /// [rgbaBytes] is the source frame's RGBA buffer (any width/height).
-  /// Returns a tightly-packed RGBA buffer of size
-  /// idCardOutputWidth * idCardOutputHeight * 4, or null if no card
-  /// was detected.
-  static Uint8List? cropIdCard(Uint8List rgbaBytes, int width, int height) {
-    final outWidth = idCardOutputWidth;
-    final outHeight = idCardOutputHeight;
-    final outputLength = outWidth * outHeight * 4;
-
-    final Pointer<Uint8> inputPointer = malloc<Uint8>(rgbaBytes.length);
-    final Pointer<Uint8> outputPointer = malloc<Uint8>(outputLength);
-
-    try {
-      inputPointer.asTypedList(rgbaBytes.length).setAll(0, rgbaBytes);
-
-      final bool success = _cropIdCard(
-        inputPointer,
-        width,
-        height,
-        outputPointer,
-      );
-
-      if (!success) {
-        return null;
-      }
-
-      return Uint8List.fromList(outputPointer.asTypedList(outputLength));
-    } finally {
-      malloc.free(inputPointer);
-      malloc.free(outputPointer);
-    }
-  }
 
   /// [rgbaBytes] is the source frame's RGBA buffer (any width/height).
   /// Returns the 4 detected card corners in pixel coordinates, ordered

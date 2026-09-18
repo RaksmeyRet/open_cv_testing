@@ -622,8 +622,23 @@ bool detectIDCard(const Mat& image, vector<Point>& bestCorners, double& bestScor
         if (width < 1 || height < 1) continue;
         double ratio = max(width, height) / min(width, height);
         double ratioScore = 1.0 - min(abs(ratio - CR80_RATIO) / CR80_RATIO, 1.0);
-        if (ratioScore > bestScore) {
-            bestScore = ratioScore;
+        double rectangleArea = width * height;
+        double rectangularity = min(area / rectangleArea, 1.0);
+        if (rectangularity < 0.60 || ratioScore < 0.75) continue;
+
+        // Prefer the actual card over large background rectangles with the
+        // same aspect ratio, while keeping the card size flexible in-frame.
+        double expectedAreaRatio = 0.18;
+        double areaScore = max(
+            0.0,
+            1.0 - abs(areaRatio - expectedAreaRatio) / 0.22);
+        double candidateScore =
+            (0.55 * ratioScore) +
+            (0.25 * rectangularity) +
+            (0.20 * areaScore);
+
+        if (candidateScore > bestScore) {
+            bestScore = candidateScore;
             bestCorners = ordered;
             found = true;
         }
@@ -717,6 +732,38 @@ bool detectIDCard(const Mat& image, vector<Point>& bestCorners, double& bestScor
         saveImage("06_id_card_detection.jpg", detected);
     }
     return found;
+}
+// exported C function for local OCR detection to opencv native library
+extern "C" bool local_ocr_detect_id_card(
+    uint8_t *input_pixels,
+    int width,
+    int height,
+    float *out_corners)
+{
+    if (input_pixels == nullptr || width <= 0 || height <= 0 || out_corners == nullptr)
+    {
+        return false;
+    }
+
+    cv::Mat rgba(height, width, CV_8UC4, input_pixels);
+    cv::Mat bgr;
+    cv::cvtColor(rgba, bgr, cv::COLOR_RGBA2BGR);
+
+    std::vector<cv::Point> corners;
+    double score = 0.0;
+
+    if (!detectIDCard(bgr, corners, score) || corners.size() != 4)
+    {
+        return false;
+    }
+
+    for (int i = 0; i < 4; ++i)
+    {
+        out_corners[i * 2] = static_cast<float>(corners[i].x);
+        out_corners[i * 2 + 1] = static_cast<float>(corners[i].y);
+    }
+
+    return true;
 }
 
 int main()
