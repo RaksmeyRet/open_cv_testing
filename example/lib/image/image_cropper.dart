@@ -58,8 +58,8 @@ Future<Uint8List> _cropImageInBackground(Map<String, dynamic> input) async {
   final source = img.decodeImage(sourceBytes);
   if (source == null) throw Exception('Unsupported image');
 
-  // The input bytes were normalized in _loadImage(). Do not rotate again.
-  final image = img.bakeOrientation(source);
+  // Normalize the original file the same way as the detection preview.
+  final image = _normalizeWorkingImage(source);
   final corners = [
     Offset(values[0], values[1]),
     Offset(values[2], values[3]),
@@ -197,8 +197,38 @@ class ImageCropperController extends GetxController {
     return normalizeCardCorners(corners);
   }
 
+  static double _quadrilateralArea(List<Offset> corners) {
+    var area = 0.0;
+    for (var i = 0; i < corners.length; i++) {
+      final next = corners[(i + 1) % corners.length];
+      area += corners[i].dx * next.dy - next.dx * corners[i].dy;
+    }
+    return area.abs() / 2;
+  }
+
+  static bool _hasDistinctCorners(List<Offset> corners) {
+    return corners.toSet().length == 4;
+  }
+
+  static double _cardCandidateScore(List<Offset> corners) {
+    final topWidth = (corners[1].dx - corners[0].dx).abs();
+    final bottomWidth = (corners[2].dx - corners[3].dx).abs();
+    final leftHeight = (corners[3].dy - corners[0].dy).abs();
+    final rightHeight = (corners[2].dy - corners[1].dy).abs();
+    final ratio =
+        math.max(topWidth, bottomWidth) / math.max(leftHeight, rightHeight);
+    final ratioScore = (1 - ((ratio - _idCardAspectRatio).abs() / 0.8)).clamp(
+      0.0,
+      1.0,
+    );
+    final areaScore = (1 - ((_quadrilateralArea(corners) - 0.12).abs() / 0.18))
+        .clamp(0.0, 1.0);
+    return ratioScore * 0.7 + areaScore * 0.3;
+  }
+
   static bool _looksLikeCard(List<Offset> corners) {
-    if (corners.length != 4) return false;
+    if (corners.length != 4 || !_hasDistinctCorners(corners)) return false;
+    if (_quadrilateralArea(corners) < 0.015) return false;
 
     final topWidth = (corners[1].dx - corners[0].dx).abs();
     final bottomWidth = (corners[2].dx - corners[3].dx).abs();
@@ -217,7 +247,8 @@ class ImageCropperController extends GetxController {
   }
 
   static bool _looksLikeFarCard(List<Offset> corners) {
-    if (corners.length != 4) return false;
+    if (corners.length != 4 || !_hasDistinctCorners(corners)) return false;
+    if (_quadrilateralArea(corners) < 0.003) return false;
 
     final topWidth = (corners[1].dx - corners[0].dx).abs();
     final bottomWidth = (corners[2].dx - corners[3].dx).abs();
@@ -248,10 +279,13 @@ class ImageCropperController extends GetxController {
       if (decoded == null) throw Exception('Unsupported image');
 
       final image = _normalizeWorkingImage(decoded);
-      sourceBytes.value = Uint8List.fromList(img.encodeJpg(image, quality: 97));
       decodedImage.value = image;
-      previewBytes = Uint8List.fromList(img.encodeJpg(image, quality: 85));
-      corners.assignAll(_fallbackCorners(image));
+      final previewImage =
+          image.width > 1600 ? img.copyResize(image, width: 1600) : image;
+      previewBytes = Uint8List.fromList(
+        img.encodeJpg(previewImage, quality: 85),
+      );
+      corners.clear();
       if (!_autoDetectStarted) {
         _autoDetectStarted = true;
         unawaited(_autoDetectCorners(image));
@@ -267,8 +301,8 @@ class ImageCropperController extends GetxController {
     }
     isDetecting.value = true;
     try {
-      // Match the native local_ocr.cpp detector: target width is 1000 px.
-      const detectionWidth = 1000;
+      // Match the native local_ocr.cpp detector: target width is 1600 px.
+      const detectionWidth = 1600;
       final strictCandidates =
           <
             ({
@@ -301,18 +335,6 @@ class ImageCropperController extends GetxController {
         sourceWidth: image.width,
         sourceHeight: image.height,
       ));
-
-      // Keep a high-resolution full-frame pass so cards near the edge are not
-      // excluded by the centered crop.
-      if (image.width > detectionWidth) {
-        strictCandidates.add((
-          image: img.copyResize(image, width: detectionWidth * 2),
-          offsetX: 0,
-          offsetY: 0,
-          sourceWidth: image.width,
-          sourceHeight: image.height,
-        ));
-      }
 
       final centeredCropWidth = (image.width * .88).round();
       final centeredCropHeight = (image.height * .88).round();
@@ -352,26 +374,45 @@ class ImageCropperController extends GetxController {
         sourceHeight: image.height,
       ));
 
-      for (final candidate in strictCandidates) {
+      List<Offset>? bestStrictCorners;
+      var bestStrictScore = 0.0;
+      for (var index = 0; index < strictCandidates.length; index++) {
+        final candidate = strictCandidates[index];
         final values = await _detectFromCandidate(candidate);
         if (values == null) continue;
 
         final normalized = _normalizeDetectedCorners(values);
-        if (_looksLikeCard(normalized)) {
+        final score = _cardCandidateScore(normalized);
+        if (_looksLikeCard(normalized) && score >= 0.65 && index == 0) {
           corners.assignAll(normalized);
           return;
         }
+        if (_looksLikeCard(normalized) && score > bestStrictScore) {
+          bestStrictCorners = normalized;
+          bestStrictScore = score;
+        }
+      }
+      if (bestStrictCorners != null) {
+        corners.assignAll(bestStrictCorners);
+        return;
       }
 
+      List<Offset>? bestRelaxedCorners;
+      var bestRelaxedScore = 0.0;
       for (final candidate in relaxedCandidates) {
         final values = await _detectFromCandidate(candidate);
         if (values == null) continue;
 
         final normalized = _normalizeDetectedCorners(values);
-        if (_looksLikeFarCard(normalized)) {
-          corners.assignAll(normalized);
-          return;
+        final score = _cardCandidateScore(normalized);
+        if (_looksLikeFarCard(normalized) && score > bestRelaxedScore) {
+          bestRelaxedCorners = normalized;
+          bestRelaxedScore = score;
         }
+      }
+      if (bestRelaxedCorners != null) {
+        corners.assignAll(bestRelaxedCorners);
+        return;
       }
 
       // Final fallback remains conservative and centered, so the user can still
@@ -412,9 +453,9 @@ class ImageCropperController extends GetxController {
     candidate,
   ) async {
     final detectionImage =
-        candidate.image.width <= 1000
+        candidate.image.width <= 1600
             ? candidate.image
-            : img.copyResize(candidate.image, width: 1000);
+            : img.copyResize(candidate.image, width: 1600);
 
     final values = await compute(_detectCornersInBackground, {
       'rgba': detectionImage.getBytes(order: img.ChannelOrder.rgba),
@@ -516,7 +557,7 @@ class KhemraImageCropperScreen extends StatelessWidget {
         );
       }
 
-      if (image == null || controller.isDetecting.value || corners.isEmpty) {
+      if (image == null || controller.previewBytes == null) {
         return const Scaffold(body: Center(child: CircularProgressIndicator()));
       }
 
@@ -550,6 +591,7 @@ class KhemraImageCropperScreen extends StatelessWidget {
                       height: previewSize.height,
                       child: GestureDetector(
                         onPanStart: (details) {
+                          if (corners.isEmpty) return;
                           var nearest = 0;
                           var distance = double.infinity;
                           for (var i = 0; i < corners.length; i++) {
@@ -581,7 +623,8 @@ class KhemraImageCropperScreen extends StatelessWidget {
                               fit: BoxFit.fill,
                               gaplessPlayback: true,
                             ),
-                            CustomPaint(painter: _CropPainter(corners)),
+                            if (corners.isNotEmpty)
+                              CustomPaint(painter: _CropPainter(corners)),
                           ],
                         ),
                       ),
@@ -614,7 +657,9 @@ class KhemraImageCropperScreen extends StatelessWidget {
                     Expanded(
                       child: FilledButton.icon(
                         onPressed:
-                            controller.isApplying.value
+                            controller.isApplying.value ||
+                                    controller.isDetecting.value ||
+                                    corners.isEmpty
                                 ? null
                                 : controller.apply,
                         icon:

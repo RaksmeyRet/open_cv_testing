@@ -4,7 +4,7 @@ import 'package:http/http.dart' as http;
 import 'dart:convert';
 
 import 'package:google_mlkit_text_recognition/google_mlkit_text_recognition.dart'
-  as mlkit;
+    as mlkit;
 
 import '../models/khemra_scan_result.dart';
 import 'text_recognizer.dart';
@@ -39,6 +39,9 @@ class OcrService {
 
   /// Calls the OCR API with [imageFile] and returns an [OcrServiceResult].
   Future<OcrServiceResult> recognize(File imageFile) async {
+    final localResult = await _recognizeLocally(imageFile);
+    if (localResult != null) return localResult;
+
     try {
       final response = await _sendRequest(imageFile, fieldName: 'file');
       if (response.statusCode < 200 || response.statusCode >= 300) {
@@ -71,8 +74,6 @@ class OcrService {
 
       return OcrServiceResult(values: values);
     } catch (error) {
-      final localResult = await _recognizeLocally(imageFile);
-      if (localResult != null) return localResult;
       return OcrServiceResult(
         values: List.filled(_fieldCount, ''),
         error: _formatFailure(error),
@@ -146,7 +147,7 @@ class OcrService {
           );
 
     final streamedResponse = await request.send().timeout(
-      const Duration(seconds: 45),
+      const Duration(seconds: 20),
     );
     return http.Response.fromStream(streamedResponse);
   }
