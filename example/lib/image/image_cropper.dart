@@ -625,6 +625,32 @@ class KhemraImageCropperScreen extends StatelessWidget {
                             ),
                             if (corners.isNotEmpty)
                               CustomPaint(painter: _CropPainter(corners)),
+                              if (controller.isDetecting.value)
+                              Positioned.fill(
+                                child: Container(
+                                  color: Colors.black54,
+                                  child: Center(
+                                    child: Column(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        const CircularProgressIndicator(
+                                          color: Colors.white,
+                                          strokeWidth: 3,
+                                        ),
+                                        const SizedBox(height: 12),
+                                        Text(
+                                          'កំពុងស្វែងរក...',
+                                          style: const TextStyle(
+                                            color: Colors.white,
+                                            fontSize: 15,
+                                            fontWeight: FontWeight.w700,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              ),
                           ],
                         ),
                       ),
@@ -663,7 +689,8 @@ class KhemraImageCropperScreen extends StatelessWidget {
                                 ? null
                                 : controller.apply,
                         icon:
-                            controller.isApplying.value
+                          controller.isApplying.value ||
+                              controller.isDetecting.value
                                 ? const SizedBox(
                                   width: 18,
                                   height: 18,
@@ -683,6 +710,8 @@ class KhemraImageCropperScreen extends StatelessWidget {
                         label: Text(
                           controller.isApplying.value
                               ? 'កំពុងច្រិប...'
+                              : controller.isDetecting.value
+                              ? 'កំពុងស្វែងរក...'
                               : 'បន្ទាប់',
                         ),
                       ),
