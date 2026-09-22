@@ -219,8 +219,8 @@ bool IdCardCropper::findCorners(
         const double areaFraction = area / imageArea;
 
         if (
-            areaFraction < 0.01 ||
-            areaFraction > 0.995)
+            areaFraction < 0.015 ||
+            areaFraction > 0.35)
         {
             continue;
         }
@@ -274,12 +274,17 @@ bool IdCardCropper::findCorners(
             continue;
         }
 
-        // Prefer card geometry over large background rectangles.
-        const double areaScore = std::min(areaFraction / 0.10, 1.0);
+        // A card usually occupies a moderate portion of the frame. A large
+        // table, wall, or phone-screen boundary can have the same aspect
+        // ratio, so do not reward area monotonically.
+        const double expectedAreaFraction = 0.08;
+        const double areaScore = std::max(
+            0.0,
+            1.0 - std::abs(areaFraction - expectedAreaFraction) / 0.14);
         const double score =
-            (0.70 * aspectScore) +
-            (0.25 * rectangularity) +
-            (0.05 * areaScore);
+            (0.65 * aspectScore) +
+            (0.20 * rectangularity) +
+            (0.15 * areaScore);
 
         if (score > bestScore)
         {

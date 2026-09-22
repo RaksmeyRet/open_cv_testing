@@ -4,11 +4,15 @@
 #include <iostream>
 
 #include "BlurDetector.hpp"
-#include "IdCardCropper.hpp"
+
+extern "C" bool local_ocr_detect_id_card(
+    uint8_t *input_pixels,
+    int width,
+    int height,
+    float *out_corners);
 
 // Module-level instances
 static BlurDetector blurDetector;
-static IdCardCropper cropper;
 
 static constexpr int kIdCardOutputWidth = 1000;
 static constexpr int kIdCardOutputHeight = 630;
@@ -74,60 +78,6 @@ extern "C"
         return kIdCardOutputHeight;
     }
 
-    // Auto-detects and crops an ID card from the input RGBA buffer, then
-    // binarizes it. output_pixels must be pre-allocated by the caller with
-    // size get_id_card_output_width() * get_id_card_output_height() * 4 bytes
-    // (RGBA). Returns false if no card was detected, or if the processed
-    // image size unexpectedly doesn't match the known fixed output size
-    // (output_pixels is left untouched in both cases).
-    NATIVE_OPENCV_EXPORT bool crop_id_card(
-        uint8_t *input_pixels,
-        int width,
-        int height,
-        uint8_t *output_pixels)
-    {
-        cv::Mat rgba(height, width, CV_8UC4, input_pixels);
-        cv::Mat src;
-        cv::cvtColor(rgba, src, cv::COLOR_RGBA2BGR);
-        cv::Mat processed; // single-channel binary image
-
-        try
-        {
-            if (!cropper.autoCropAndBinarize(src, processed))
-            {
-                return false;
-            }
-        }
-        catch (const std::exception &error)
-        {
-            std::cerr << "ID card crop error: " << error.what() << '\n';
-            return false;
-        }
-
-        if (
-            processed.cols != kIdCardOutputWidth ||
-            processed.rows != kIdCardOutputHeight)
-        {
-            std::cerr
-                << "Unexpected ID card output size: "
-                << processed.cols << "x" << processed.rows
-                << " (expected "
-                << kIdCardOutputWidth << "x" << kIdCardOutputHeight
-                << ")\n";
-            return false;
-        }
-
-        cv::Mat outputRgba;
-        cv::cvtColor(processed, outputRgba, cv::COLOR_GRAY2RGBA);
-
-        std::memcpy(
-            output_pixels,
-            outputRgba.data,
-            outputRgba.total() * outputRgba.elemSize());
-
-        return true;
-    }
-
     // Detects the 4 corners of an ID card in the input RGBA buffer, without
     // cropping/binarizing. out_corners must be pre-allocated by the caller
     // with 8 floats: [tlX, tlY, trX, trY, brX, brY, blX, blY], in the same
@@ -139,31 +89,12 @@ extern "C"
         int height,
         float *out_corners)
     {
-        cv::Mat rgba(height, width, CV_8UC4, input_pixels);
-        cv::Mat src;
-        cv::cvtColor(rgba, src, cv::COLOR_RGBA2BGR);
-
-        std::vector<cv::Point2f> corners;
-        try
+        if (input_pixels == nullptr || out_corners == nullptr)
         {
-            if (!cropper.detectCorners(src, corners) || corners.size() != 4)
-            {
-                return false;
-            }
-        }
-        catch (const std::exception &error)
-        {
-            std::cerr << "ID card corner detection error: " << error.what() << '\n';
             return false;
         }
 
-        for (int i = 0; i < 4; ++i)
-        {
-            out_corners[i * 2] = corners[i].x;
-            out_corners[i * 2 + 1] = corners[i].y;
-        }
-
-        return true;
+        return local_ocr_detect_id_card(input_pixels, width, height, out_corners);
     }
 
 } // extern "C"

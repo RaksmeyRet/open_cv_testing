@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 
 /// A status card that shows how many ID card fields have been recognised and
@@ -155,8 +157,8 @@ class ScannerToolButton extends StatelessWidget {
   }
 
   Widget _buildLabel() {
-    return RotatedBox(
-      quarterTurns: labelOnLeft ? 3 : 1,
+    return Transform.rotate(
+      angle: math.pi / 2,
       child: Text(
         label,
         style: const TextStyle(
