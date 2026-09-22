@@ -55,4 +55,4 @@ class KhemraScanResult {
 
   @override
   String toString() => 'KhemraScanResult(${toJson()})';
-}
+}  

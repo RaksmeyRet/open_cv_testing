@@ -4,6 +4,7 @@
 #include <iostream>
 
 #include "BlurDetector.hpp"
+#include "id_card_detector.hpp"
 
 extern "C" bool local_ocr_detect_id_card(
     uint8_t *input_pixels,
@@ -94,7 +95,24 @@ extern "C"
             return false;
         }
 
-        return local_ocr_detect_id_card(input_pixels, width, height, out_corners);
+        cv::Mat rgba(height, width, CV_8UC4, input_pixels);
+        cv::Mat bgr;
+        cv::cvtColor(rgba, bgr, cv::COLOR_RGBA2BGR);
+
+        DetectionConfig config;
+        IDCardDetectionPipeline pipeline(config);
+        DetectionResult result = pipeline.process(bgr);
+        if (!result.success || result.corners.size() != 4)
+        {
+            return false;
+        }
+
+        for (int i = 0; i < 4; ++i)
+        {
+            out_corners[i * 2] = result.corners[i].x;
+            out_corners[i * 2 + 1] = result.corners[i].y;
+        }
+        return true;
     }
 
 } // extern "C"

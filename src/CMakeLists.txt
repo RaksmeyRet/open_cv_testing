@@ -19,3 +19,7 @@ target_link_libraries(native_opencv PRIVATE
     ${OpenCV_LIBS}
     c++_shared
 )
+
+target_include_directories(native_opencv PRIVATE
+    ${CMAKE_CURRENT_LIST_DIR}/../example/src
+)
