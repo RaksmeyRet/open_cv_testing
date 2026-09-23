@@ -99,12 +99,28 @@ extern "C"
         cv::Mat bgr;
         cv::cvtColor(rgba, bgr, cv::COLOR_RGBA2BGR);
 
+        std::cout << "\nSTEP 1: Detecting document...\n";
         DetectionConfig config;
+        config.contour_confidence_threshold = 45.0f;
+        config.contour_area_min_ratio = 0.003;
+        config.contour_max_check = 120;
         IDCardDetectionPipeline pipeline(config);
         DetectionResult result = pipeline.process(bgr);
         if (!result.success || result.corners.size() != 4)
         {
+            std::cerr << "Could not detect ID card.\n";
             return false;
+        }
+
+        std::cout << "Detection method: " << result.method << "\n";
+        std::cout << "Confidence score: " << result.info.support << "\n";
+        std::cout << "Original image: " << bgr.cols << " x " << bgr.rows
+                  << " pixels\n";
+        std::cout << "Card corners (TL, TR, BR, BL):\n";
+        for (size_t i = 0; i < result.corners.size(); ++i)
+        {
+            std::cout << "  [" << i << "] x=" << result.corners[i].x
+                      << "  y=" << result.corners[i].y << "\n";
         }
 
         for (int i = 0; i < 4; ++i)

@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:get/get.dart';
 import 'package:image/image.dart' as img;
+import 'package:image_picker/image_picker.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:photo_manager/photo_manager.dart';
 
@@ -124,6 +125,8 @@ class _PhotoLibraryController extends GetxController {
   }
 }
 
+// Kept as an optional custom gallery fallback.
+// ignore: unused_element
 class _PhotoLibraryScreen extends GetView<_PhotoLibraryController> {
   const _PhotoLibraryScreen();
 
@@ -273,13 +276,8 @@ class KhemraScannerScreen extends StatefulWidget {
 
 class _KhemraScannerScreenState extends State<KhemraScannerScreen>
     with SingleTickerProviderStateMixin, WidgetsBindingObserver {
-  static const String _ocrBaseUrl = String.fromEnvironment(
-    'OCR_BASE_URL',
-    defaultValue: 'http://157.245.49.153:8212',
-  );
-
   final List<TextEditingController> _controllers = List.generate(
-    5,
+    IdCardData.defaultFieldLabels.length,
     (_) => TextEditingController(),
   );
 
@@ -302,7 +300,7 @@ class _KhemraScannerScreenState extends State<KhemraScannerScreen>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    _ocrService = OcrService(baseUrl: _ocrBaseUrl);
+    _ocrService = OcrService();
     _reloadController = AnimationController(
       vsync: this,
       duration: const Duration(seconds: 1),
@@ -319,6 +317,7 @@ class _KhemraScannerScreenState extends State<KhemraScannerScreen>
     WidgetsBinding.instance.removeObserver(this);
     _reloadController.dispose();
     _cameraController?.dispose();
+    _ocrService.dispose();
     for (final controller in _controllers) {
       controller.dispose();
     }
@@ -358,7 +357,7 @@ class _KhemraScannerScreenState extends State<KhemraScannerScreen>
       );
       final controller = CameraController(
         back.isNotEmpty ? back.first : cameras.first,
-        ResolutionPreset.veryHigh,
+        ResolutionPreset.high,
         enableAudio: false,
         imageFormatGroup: ImageFormatGroup.jpeg,
       );
@@ -433,17 +432,16 @@ class _KhemraScannerScreenState extends State<KhemraScannerScreen>
   }
 
   Future<void> _openGallery() async {
-    final navigator = Navigator.of(context);
     if (_showCamera) {
       final controller = _cameraController;
       _cameraController = null;
       if (mounted) setState(() => _showCamera = false);
       await controller?.dispose();
     }
-    final imageFile = await navigator.push<File>(
-      MaterialPageRoute(builder: (_) => const _PhotoLibraryScreen()),
-    );
-    if (!mounted || imageFile == null) return;
+
+    final selected = await ImagePicker().pickImage(source: ImageSource.gallery);
+    if (!mounted || selected == null) return;
+    final imageFile = File(selected.path);
 
     final croppedFile = await _cropImage(imageFile);
     if (!mounted) return;
@@ -478,6 +476,9 @@ class _KhemraScannerScreenState extends State<KhemraScannerScreen>
       var oriented = img.bakeOrientation(decoded);
       if (oriented.height > oriented.width) {
         oriented = img.copyRotate(oriented, angle: 90);
+      }
+      if (oriented.width > 1600) {
+        oriented = img.copyResize(oriented, width: 1600);
       }
 
       final directory = await getTemporaryDirectory();
@@ -529,10 +530,13 @@ class _KhemraScannerScreenState extends State<KhemraScannerScreen>
     if (!_isFormValid) return;
     final result = KhemraScanResult(
       idNumber: _controllers[0].text.trim(),
-      name: _controllers[1].text.trim(),
-      dateOfBirth: _controllers[2].text.trim(),
-      expiryDate: _controllers[3].text.trim(),
-      gender: _controllers[4].text.trim(),
+      surname: _controllers[1].text.trim(),
+      username: _controllers[2].text.trim(),
+      dateOfBirth: _controllers[3].text.trim(),
+      expiryDate: _controllers[4].text.trim(),
+      gender: _controllers[5].text.trim(),
+      placeOfBirth: _controllers[6].text.trim(),
+      address: _controllers[7].text.trim(),
     );
     Navigator.of(context).pop(result);
   }

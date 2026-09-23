@@ -2,46 +2,78 @@
 class KhemraScanResult {
   const KhemraScanResult({
     this.idNumber,
-    this.name,
+    this.surname,
+    this.username,
     this.dateOfBirth,
     this.expiryDate,
     this.gender,
+    this.placeOfBirth,
+    this.address,
   });
 
   final String? idNumber;
-  final String? name;
+  final String? surname;
+  final String? username;
   final String? dateOfBirth;
   final String? expiryDate;
   final String? gender;
+  final String? placeOfBirth;
+  final String? address;
+
+  String? get name => [
+    surname,
+    username,
+  ].where((value) => value != null && value.trim().isNotEmpty).join(' ');
 
   factory KhemraScanResult.fromJson(Map<String, dynamic> json) {
+    final fields =
+        json['fields'] is Map
+            ? Map<String, dynamic>.from(json['fields'] as Map)
+            : json;
+
+    String? value(List<String> keys) {
+      for (final key in keys) {
+        final candidate = fields[key] ?? json[key];
+        if (candidate != null && '$candidate'.trim().isNotEmpty) {
+          return '$candidate'.trim();
+        }
+      }
+      return null;
+    }
+
     return KhemraScanResult(
-      idNumber: json['ID number'] ?? json['idnumber'] ?? json['idNumber'],
-      name: json['Name'] ?? json['name'] ?? json['fullname'],
-      dateOfBirth:
-          json['Date of birth'] ?? json['dateofbirth'] ?? json['dob'],
-      expiryDate:
-          json['Expiry date'] ?? json['expirydate'] ?? json['expiry'],
-      gender: json['Gender'] ?? json['gender'] ?? json['sex'],
+      idNumber: value(['ID number', 'id_number', 'idnumber', 'idNumber']),
+      surname: value(['Surname', 'surname_en', 'surname', 'last_name']),
+      username: value(['Username', 'username_en', 'username', 'given_name']),
+      dateOfBirth: value([
+        'Date of birth',
+        'date_of_birth',
+        'dateofbirth',
+        'dob',
+      ]),
+      expiryDate: value(['Expiry date', 'expiry_date', 'expirydate', 'expiry']),
+      gender: value(['Gender', 'gender', 'sex']),
+      placeOfBirth: value(['Place of birth', 'place_of_birth', 'placeofbirth']),
+      address: value(['Address', 'address']),
     );
   }
 
   Map<String, dynamic> toJson() {
     return {
       'ID number': idNumber,
-      'Name': name,
+      'Surname': surname,
+      'Username': username,
       'Date of birth': dateOfBirth,
       'Expiry date': expiryDate,
       'Gender': gender,
+      'Place of birth': placeOfBirth,
+      'Address': address,
     };
   }
 
   static List<KhemraScanResult> parseList(List<dynamic> list) {
     return list
-        .map(
-          (item) =>
-              KhemraScanResult.fromJson(item as Map<String, dynamic>),
-        )
+        .map((item) => KhemraScanResult.fromJson(item as Map<String, dynamic>))
         .toList();
   }
 
@@ -55,4 +87,4 @@ class KhemraScanResult {
 
   @override
   String toString() => 'KhemraScanResult(${toJson()})';
-}  
+}

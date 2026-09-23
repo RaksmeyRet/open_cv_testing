@@ -1,0 +1,38 @@
+{
+  "card_type": "national_id",
+  "confidence": 0.95,
+  "fields": {
+    "address": "ត្រពាំងថ្ម, គុស, ត្រាំកក់, តាកែវ",
+    "address_commune": "គុស",
+    "address_district": "ត្រាំកក់",
+    "address_province": "តាកែវ",
+    "address_village": "ត្រពាំងថ្ម",
+    "date_of_birth": "2004-10-01",
+    "dob_check_digit": "4",
+    "dob_check_digit_valid": true,
+    "expiry_check_digit": "9",
+    "expiry_check_digit_valid": true,
+    "expiry_date": "2030-05-27",
+    "full_name_en": "SOCHEAT CHENG",
+    "full_name_kh": "េចង សុ និន",
+    "gender": "Male",
+    "id_check_digit": "2",
+    "id_check_digit_valid": true,
+    "id_number": "101405393",
+    "nationality": "Cambodian",
+    "place_of_birth": "ត្រាំកក់, តាកែវ",
+    "place_of_birth_commune": "",
+    "place_of_birth_district": "ត្រាំកក់",
+    "place_of_birth_province": "តាកែវ",
+    "place_of_birth_village": "",
+    "surname_en": "CHENG",
+    "username_en": "SOCHEAT"
+  },
+  "parsing_method": "MRZ_position_based",
+  "raw_ocr_text": "x Keb = as Ys xX A ASS aN\nគោត្តនាទនិងនាទៈ េចង សុ និន > Sy |\n\nថ្ងៃខែខ្នាំកំញើតៈ ន រទ ‘58. ប្រុស Ant ១៧៥ ស.ប ~\nទីកន្លែងកំណើត: LIRA ស្រុកត្រាំកក់ តាកែវ\n\nអាសឃដ្ឋានៈ ភូមិត្រពាំងថ្ម\n\nឃុំគុស ស្រុកត្រាំកក់ តាកែវ\n\nច ២៨ .០៥.២០២០ ដល់ថ្ងៃ ២៧. ០៥.២០៣០\n ប្រជ្រុយចំ ១ស.ម មុខក្រោមគល់ភ្នែកស្អាំ",
+  "validation": {
+    "dob_valid": true,
+    "expiry_valid": true,
+    "id_valid": true
+  }
+}

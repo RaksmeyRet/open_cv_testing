@@ -8,19 +8,25 @@ class IdCardData {
   /// Default Cambodian ID card field labels (English).
   static const List<String> defaultFieldLabels = [
     'ID number',
-    'Name',
+    'Surname',
+    'Username',
     'Date of birth',
     'Expiry date',
     'Gender',
+    'Place of birth',
+    'Address',
   ];
 
   /// Default Cambodian ID card field labels (Khmer).
   static const List<String> defaultFieldLabelsKhmer = [
     'លេខអត្តសញ្ញាណ',
-    'គោត្តនាមនិងនាម',
+    'គោត្តនាម',
+    'នាម',
     'ថ្ងៃខែឆ្នាំកំណើត',
     'ថ្ងៃផុតកំណត់',
     'ភេទ',
+    'ទីកន្លែងកំណើត',
+    'អាសយដ្ឋាន',
   ];
 
   factory IdCardData.defaults() => const IdCardData(
