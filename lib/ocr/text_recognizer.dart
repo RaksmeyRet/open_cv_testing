@@ -14,13 +14,21 @@ class TextRecognizer {
       'cardnumber',
     ],
     [
-      'name',
-      'fullname',
-      'full_name',
-      'fullnameen',
+      'surname',
+      'surname_en',
+      'lastname',
+      'last_name',
+      'familyname',
       'full_name_en',
-      'englishname',
-      'nameen',
+    ],
+    [
+      'username',
+      'username_en',
+      'givenname',
+      'given_name',
+      'firstname',
+      'first_name',
+      'name',
     ],
     ['dateofbirth', 'dob', 'birthdate', 'birth', 'datebirth'],
     [
@@ -32,6 +40,8 @@ class TextRecognizer {
       'validuntil',
     ],
     ['gender', 'sex', 'genderidentity'],
+    ['placeofbirth', 'place_of_birth', 'birthplace', 'birth_place', 'pob'],
+    ['address', 'residence', 'homeaddress', 'currentaddress'],
   ];
 
   /// Recursively walks the [response] JSON and collects all leaf values into

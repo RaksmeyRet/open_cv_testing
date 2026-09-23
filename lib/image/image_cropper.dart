@@ -210,25 +210,9 @@ class ImageCropperController extends GetxController {
     return corners.toSet().length == 4;
   }
 
-  static double _cardCandidateScore(List<Offset> corners) {
-    final topWidth = (corners[1].dx - corners[0].dx).abs();
-    final bottomWidth = (corners[2].dx - corners[3].dx).abs();
-    final leftHeight = (corners[3].dy - corners[0].dy).abs();
-    final rightHeight = (corners[2].dy - corners[1].dy).abs();
-    final ratio =
-        math.max(topWidth, bottomWidth) / math.max(leftHeight, rightHeight);
-    final ratioScore = (1 - ((ratio - _idCardAspectRatio).abs() / 0.8)).clamp(
-      0.0,
-      1.0,
-    );
-    final areaScore = (1 - ((_quadrilateralArea(corners) - 0.12).abs() / 0.18))
-        .clamp(0.0, 1.0);
-    return ratioScore * 0.7 + areaScore * 0.3;
-  }
-
   static bool _looksLikeCard(List<Offset> corners) {
     if (corners.length != 4 || !_hasDistinctCorners(corners)) return false;
-    if (_quadrilateralArea(corners) < 0.015) return false;
+    if (_quadrilateralArea(corners) < 0.08) return false;
 
     final topWidth = (corners[1].dx - corners[0].dx).abs();
     final bottomWidth = (corners[2].dx - corners[3].dx).abs();
@@ -244,26 +228,6 @@ class ImageCropperController extends GetxController {
     final expectedRatio = 1.586;
     final ratioDelta = (ratio - expectedRatio).abs();
     return ratioDelta <= 0.6;
-  }
-
-  static bool _looksLikeFarCard(List<Offset> corners) {
-    if (corners.length != 4 || !_hasDistinctCorners(corners)) return false;
-    if (_quadrilateralArea(corners) < 0.003) return false;
-
-    final topWidth = (corners[1].dx - corners[0].dx).abs();
-    final bottomWidth = (corners[2].dx - corners[3].dx).abs();
-    final leftHeight = (corners[3].dy - corners[0].dy).abs();
-    final rightHeight = (corners[2].dy - corners[1].dy).abs();
-
-    final width = math.max(topWidth, bottomWidth);
-    final height = math.max(leftHeight, rightHeight);
-
-    if (width <= 0.03 || height <= 0.03) return false;
-
-    final ratio = width / height;
-    final expectedRatio = 1.586;
-    final ratioDelta = (ratio - expectedRatio).abs();
-    return ratioDelta <= 1.15;
   }
 
   @override
@@ -301,122 +265,67 @@ class ImageCropperController extends GetxController {
     }
     isDetecting.value = true;
     try {
-      // Match the native local_ocr.cpp detector: target width is 1600 px.
-      const detectionWidth = 1600;
-      final strictCandidates =
-          <
-            ({
-              img.Image image,
-              int offsetX,
-              int offsetY,
-              int sourceWidth,
-              int sourceHeight,
-            })
-          >[];
-      final relaxedCandidates =
-          <
-            ({
-              img.Image image,
-              int offsetX,
-              int offsetY,
-              int sourceWidth,
-              int sourceHeight,
-            })
-          >[];
+      final detectionImage =
+          image.width > 1200 ? img.copyResize(image, width: 1200) : image;
+      final candidates = <
+        ({
+          img.Image image,
+          int offsetX,
+          int offsetY,
+          int sourceWidth,
+          int sourceHeight,
+        })
+      >[
+        (
+          image: detectionImage,
+          offsetX: 0,
+          offsetY: 0,
+          sourceWidth: image.width,
+          sourceHeight: image.height,
+        ),
+      ];
 
-      final baseImage =
-          image.width > detectionWidth
-              ? img.copyResize(image, width: detectionWidth)
-              : image;
-      strictCandidates.add((
-        image: baseImage,
-        offsetX: 0,
-        offsetY: 0,
-        sourceWidth: image.width,
-        sourceHeight: image.height,
-      ));
+      // Center crops make a far-away card larger relative to the detector's
+      // working frame. The full-image attempt above preserves close cards.
+      for (final marginFraction in [0.10, 0.20, 0.30]) {
+        final marginX = (detectionImage.width * marginFraction).round();
+        final marginY = (detectionImage.height * marginFraction).round();
+        final cropWidth = detectionImage.width - marginX * 2;
+        final cropHeight = detectionImage.height - marginY * 2;
+        if (cropWidth < 32 || cropHeight < 32) continue;
 
-      final centeredCropWidth = (image.width * .88).round();
-      final centeredCropHeight = (image.height * .88).round();
-      final centeredCropX = ((image.width - centeredCropWidth) / 2).round();
-      final centeredCropY = ((image.height - centeredCropHeight) / 2).round();
-      final centeredImage = img.copyCrop(
-        image,
-        x: centeredCropX,
-        y: centeredCropY,
-        width: centeredCropWidth,
-        height: centeredCropHeight,
-      );
-      strictCandidates.add((
-        image: centeredImage,
-        offsetX: centeredCropX,
-        offsetY: centeredCropY,
-        sourceWidth: image.width,
-        sourceHeight: image.height,
-      ));
+        final cropped = img.copyCrop(
+          detectionImage,
+          x: marginX,
+          y: marginY,
+          width: cropWidth,
+          height: cropHeight,
+        );
+        final resized =
+            cropped.width > 1200
+                ? img.copyResize(cropped, width: 1200)
+                : cropped;
+        candidates.add((
+          image: resized,
+          offsetX: marginX,
+          offsetY: marginY,
+          sourceWidth: image.width,
+          sourceHeight: image.height,
+        ));
+      }
 
-      final farCropWidth = (image.width * .95).round();
-      final farCropHeight = (image.height * .95).round();
-      final farCropX = ((image.width - farCropWidth) / 2).round();
-      final farCropY = ((image.height - farCropHeight) / 2).round();
-      final farImage = img.copyCrop(
-        image,
-        x: farCropX,
-        y: farCropY,
-        width: farCropWidth,
-        height: farCropHeight,
-      );
-      relaxedCandidates.add((
-        image: farImage,
-        offsetX: farCropX,
-        offsetY: farCropY,
-        sourceWidth: image.width,
-        sourceHeight: image.height,
-      ));
-
-      List<Offset>? bestStrictCorners;
-      var bestStrictScore = 0.0;
-      for (var index = 0; index < strictCandidates.length; index++) {
-        final candidate = strictCandidates[index];
+      for (final candidate in candidates) {
         final values = await _detectFromCandidate(candidate);
-        if (values == null) continue;
-
-        final normalized = _normalizeDetectedCorners(values);
-        final score = _cardCandidateScore(normalized);
-        if (_looksLikeCard(normalized) && score >= 0.65 && index == 0) {
-          corners.assignAll(normalized);
-          return;
-        }
-        if (_looksLikeCard(normalized) && score > bestStrictScore) {
-          bestStrictCorners = normalized;
-          bestStrictScore = score;
+        if (values != null) {
+          final normalized = _normalizeDetectedCorners(values);
+          if (_looksLikeCard(normalized)) {
+            corners.assignAll(normalized);
+            return;
+          }
         }
       }
-      if (bestStrictCorners != null) {
-        corners.assignAll(bestStrictCorners);
-        return;
-      }
 
-      List<Offset>? bestRelaxedCorners;
-      var bestRelaxedScore = 0.0;
-      for (final candidate in relaxedCandidates) {
-        final values = await _detectFromCandidate(candidate);
-        if (values == null) continue;
-
-        final normalized = _normalizeDetectedCorners(values);
-        final score = _cardCandidateScore(normalized);
-        if (_looksLikeFarCard(normalized) && score > bestRelaxedScore) {
-          bestRelaxedCorners = normalized;
-          bestRelaxedScore = score;
-        }
-      }
-      if (bestRelaxedCorners != null) {
-        corners.assignAll(bestRelaxedCorners);
-        return;
-      }
-
-      // Final fallback remains conservative and centered, so the user can still
-      // fine-tune a valid crop instead of getting a totally wrong rectangle.
+      // Keep the crop usable when native detection cannot find a card.
       corners.assignAll(_fallbackCorners(image));
     } catch (err) {
       debugPrint('Auto-detect corners failed: $err');
@@ -427,9 +336,6 @@ class ImageCropperController extends GetxController {
   }
 
   List<Offset> _fallbackCorners(img.Image image) {
-    // Default fallback stays centered and compact for near shots. The relaxed
-    // pass handles distant cards separately, so we do not over-broaden the
-    // normal crop selection and accidentally clip the actual card border.
     const width = .46;
     final height = width * image.width / image.height / _idCardAspectRatio;
     final left = (1 - width) / 2;
@@ -452,10 +358,7 @@ class ImageCropperController extends GetxController {
     })
     candidate,
   ) async {
-    final detectionImage =
-        candidate.image.width <= 1600
-            ? candidate.image
-            : img.copyResize(candidate.image, width: 1600);
+    final detectionImage = candidate.image;
 
     final values = await compute(_detectCornersInBackground, {
       'rgba': detectionImage.getBytes(order: img.ChannelOrder.rgba),
@@ -625,7 +528,7 @@ class KhemraImageCropperScreen extends StatelessWidget {
                             ),
                             if (corners.isNotEmpty)
                               CustomPaint(painter: _CropPainter(corners)),
-                              if (controller.isDetecting.value)
+                            if (controller.isDetecting.value)
                               Positioned.fill(
                                 child: Container(
                                   color: Colors.black54,
@@ -689,8 +592,8 @@ class KhemraImageCropperScreen extends StatelessWidget {
                                 ? null
                                 : controller.apply,
                         icon:
-                          controller.isApplying.value ||
-                              controller.isDetecting.value
+                            controller.isApplying.value ||
+                                    controller.isDetecting.value
                                 ? const SizedBox(
                                   width: 18,
                                   height: 18,

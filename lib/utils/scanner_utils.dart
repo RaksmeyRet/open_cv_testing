@@ -42,15 +42,16 @@ abstract final class ScannerUtils {
             ? null
             : 'Enter the 9-digit ID number.';
       case 1:
+      case 2:
         return text.length >= 2 && RegExp(r'[^\d]').hasMatch(text)
             ? null
             : 'Enter the card holder name.';
-      case 2:
       case 3:
+      case 4:
         return isValidDate(text)
             ? null
             : 'Enter a valid date in YYYY-MM-DD format.';
-      case 4:
+      case 5:
         return const {'male', 'female', 'm', 'f'}.contains(text.toLowerCase())
             ? null
             : 'Enter Male, Female, M, or F.';
