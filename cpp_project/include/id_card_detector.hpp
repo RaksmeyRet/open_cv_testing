@@ -208,7 +208,7 @@ public:
             });
 
         int max_check = std::min(config.contour_max_check, static_cast<int>(contours.size()));
-        double best_candidate_score = 0.0;
+        double best_ratio_score = 0.0;
         std::vector<cv::Point2f> best_corners;
         bool found = false;
 
@@ -241,22 +241,8 @@ public:
             double ratio = std::max(width, height) / std::min(width, height);
             double ratio_score = 1.0 - std::min(std::abs(ratio - CR80_RATIO) / CR80_RATIO, 1.0);
 
-            double rectangle_area = width * height;
-            double rectangularity = std::min(area / rectangle_area, 1.0);
-            if (rectangularity < 0.60 || ratio_score < 0.70) continue;
-
-            // Reject tiny background rectangles, but do not penalize a card
-            // that fills most of an uploaded photo.
-            double area_score = std::min(
-                area_ratio / 0.12,
-                1.0);
-            double candidate_score =
-                (0.55 * ratio_score) +
-                (0.25 * rectangularity) +
-                (0.20 * area_score);
-
-            if (candidate_score > best_candidate_score) {
-                best_candidate_score = candidate_score;
+            if (ratio_score > best_ratio_score) {
+                best_ratio_score = ratio_score;
                 best_corners = ordered;
                 found = true;
             }
@@ -265,7 +251,7 @@ public:
         if (!found) return false;
 
         out_corners = best_corners;
-        out_confidence = static_cast<float>(best_candidate_score * 100.0);
+        out_confidence = static_cast<float>(best_ratio_score * 100.0);
         return true;
     }
 };
