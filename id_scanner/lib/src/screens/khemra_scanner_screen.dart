@@ -610,7 +610,8 @@ class _KhemraScannerScreenState extends State<KhemraScannerScreen>
                 ),
               ),
               child: Image.asset(
-                'packages/id_scanner/assets/id_card.png',
+                'assets/id_card.png',
+                package: 'id_scanner',
                 fit: BoxFit.cover,
                 color: const Color(0x99000000),
                 colorBlendMode: BlendMode.darken,
@@ -700,7 +701,8 @@ class _KhemraScannerScreenState extends State<KhemraScannerScreen>
                       child: RotatedBox(
                         quarterTurns: 1,
                         child: Image.asset(
-                          'packages/id_scanner/assets/id_card.png',
+                          'assets/id_card.png',
+                          package: 'id_scanner',
                           fit: BoxFit.contain,
                         ),
                       ),

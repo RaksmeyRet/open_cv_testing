@@ -56,6 +56,6 @@ dev_dependencies:
 
 flutter:
   assets:
-    - packages/id_scanner/assets/id_card.png
-    - packages/id_scanner/assets/tessdata_config.json
-    - packages/id_scanner/assets/tessdata/
+    - assets/id_card.png
+    - assets/tessdata_config.json
+    - assets/tessdata/
