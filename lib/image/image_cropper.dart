@@ -139,6 +139,23 @@ List<Offset> normalizeCardCorners(List<Offset> corners) {
   return rotated;
 }
 
+List<Offset> normalizeDetectedCornersForDisplay(
+  List<Offset> corners,
+  double width,
+  double height,
+) {
+  if (corners.isEmpty || width <= 0 || height <= 0) return const [];
+
+  return normalizeCardCorners(corners)
+      .map(
+        (point) => Offset(
+          (point.dx / width).clamp(0.0, 1.0),
+          (point.dy / height).clamp(0.0, 1.0),
+        ),
+      )
+      .toList();
+}
+
 /// Controller for the four-corner crop screen.
 class ImageCropperController extends GetxController {
   ImageCropperController(this.source, {required this.onComplete});
@@ -191,43 +208,34 @@ class ImageCropperController extends GetxController {
   final error = RxnString();
   bool _autoDetectStarted = false;
 
-  static const double _idCardAspectRatio = 1.586;
-
   static List<Offset> _normalizeDetectedCorners(List<Offset> corners) {
     return normalizeCardCorners(corners);
   }
 
-  static double _quadrilateralArea(List<Offset> corners) {
-    var area = 0.0;
-    for (var i = 0; i < corners.length; i++) {
-      final next = corners[(i + 1) % corners.length];
-      area += corners[i].dx * next.dy - next.dx * corners[i].dy;
+  static double _cardShapeScore(List<Offset> corners) {
+    if (corners.length != 4) return double.negativeInfinity;
+
+    double distance(Offset first, Offset second) {
+      return math.sqrt(
+        math.pow(first.dx - second.dx, 2) + math.pow(first.dy - second.dy, 2),
+      );
     }
-    return area.abs() / 2;
-  }
 
-  static bool _hasDistinctCorners(List<Offset> corners) {
-    return corners.toSet().length == 4;
-  }
-
-  static bool _looksLikeCard(List<Offset> corners) {
-    if (corners.length != 4 || !_hasDistinctCorners(corners)) return false;
-    if (_quadrilateralArea(corners) < 0.08) return false;
-
-    final topWidth = (corners[1].dx - corners[0].dx).abs();
-    final bottomWidth = (corners[2].dx - corners[3].dx).abs();
-    final leftHeight = (corners[3].dy - corners[0].dy).abs();
-    final rightHeight = (corners[2].dy - corners[1].dy).abs();
-
-    final width = math.max(topWidth, bottomWidth);
-    final height = math.max(leftHeight, rightHeight);
-
-    if (width <= 0.08 || height <= 0.06) return false;
+    final width =
+        (distance(corners[0], corners[1]) + distance(corners[3], corners[2])) /
+        2;
+    final height =
+        (distance(corners[0], corners[3]) + distance(corners[1], corners[2])) /
+        2;
+    if (width <= 0 || height <= 0) return double.negativeInfinity;
 
     final ratio = width / height;
-    final expectedRatio = 1.586;
-    final ratioDelta = (ratio - expectedRatio).abs();
-    return ratioDelta <= 0.6;
+    final ratioError = (ratio - 1.586).abs();
+    final sideConsistency =
+        ((width - distance(corners[0], corners[1])).abs() +
+            (height - distance(corners[0], corners[3])).abs()) /
+        (width + height);
+    return -(ratioError + sideConsistency);
   }
 
   @override
@@ -272,22 +280,21 @@ class ImageCropperController extends GetxController {
           img.Image image,
           int offsetX,
           int offsetY,
-          int sourceWidth,
-          int sourceHeight,
+          int detectionWidth,
+          int detectionHeight,
         })
       >[
         (
           image: detectionImage,
           offsetX: 0,
           offsetY: 0,
-          sourceWidth: image.width,
-          sourceHeight: image.height,
+          detectionWidth: detectionImage.width,
+          detectionHeight: detectionImage.height,
         ),
       ];
 
-      // Center crops make a far-away card larger relative to the detector's
-      // working frame. The full-image attempt above preserves close cards.
-      for (final marginFraction in [0.10, 0.20, 0.30]) {
+      // Center crops make a far-away card larger without a long wait.
+      for (final marginFraction in [0.10, 0.20, 0.30, 0.40]) {
         final marginX = (detectionImage.width * marginFraction).round();
         final marginY = (detectionImage.height * marginFraction).round();
         final cropWidth = detectionImage.width - marginX * 2;
@@ -309,43 +316,36 @@ class ImageCropperController extends GetxController {
           image: resized,
           offsetX: marginX,
           offsetY: marginY,
-          sourceWidth: image.width,
-          sourceHeight: image.height,
+          detectionWidth: detectionImage.width,
+          detectionHeight: detectionImage.height,
         ));
       }
 
+      List<Offset>? bestCorners;
+      var bestScore = double.negativeInfinity;
       for (final candidate in candidates) {
         final values = await _detectFromCandidate(candidate);
         if (values != null) {
           final normalized = _normalizeDetectedCorners(values);
-          if (_looksLikeCard(normalized)) {
-            corners.assignAll(normalized);
-            return;
+          final score = _cardShapeScore(normalized);
+          if (score > bestScore) {
+            bestScore = score;
+            bestCorners = normalized;
           }
         }
       }
 
-      // Keep the crop usable when native detection cannot find a card.
-      corners.assignAll(_fallbackCorners(image));
+      if (bestCorners == null) {
+        corners.clear();
+      } else {
+        corners.assignAll(bestCorners);
+      }
     } catch (err) {
       debugPrint('Auto-detect corners failed: $err');
-      corners.assignAll(_fallbackCorners(image));
+      corners.clear();
     } finally {
       isDetecting.value = false;
     }
-  }
-
-  List<Offset> _fallbackCorners(img.Image image) {
-    const width = .46;
-    final height = width * image.width / image.height / _idCardAspectRatio;
-    final left = (1 - width) / 2;
-    final top = ((1 - height) / 2).clamp(.02, .98 - height);
-    return [
-      Offset(left, top),
-      Offset(left + width, top),
-      Offset(left + width, top + height),
-      Offset(left, top + height),
-    ];
   }
 
   Future<List<Offset>?> _detectFromCandidate(
@@ -353,8 +353,8 @@ class ImageCropperController extends GetxController {
       img.Image image,
       int offsetX,
       int offsetY,
-      int sourceWidth,
-      int sourceHeight,
+      int detectionWidth,
+      int detectionHeight,
     })
     candidate,
   ) async {
@@ -378,8 +378,8 @@ class ImageCropperController extends GetxController {
       candidateHeight: candidate.image.height,
       offsetX: candidate.offsetX,
       offsetY: candidate.offsetY,
-      sourceWidth: candidate.sourceWidth,
-      sourceHeight: candidate.sourceHeight,
+      sourceWidth: candidate.detectionWidth,
+      sourceHeight: candidate.detectionHeight,
     );
   }
 
