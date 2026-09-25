@@ -8,6 +8,7 @@ import '../image/image_cropper.dart';
 import '../models/khemra_scan_result.dart';
 import '../ocr/ocr_service.dart';
 import '../utils/scanner_utils.dart';
+import 'package:flutter/services.dart';
 
 class KhemraScannerController extends GetxController
     with GetSingleTickerProviderStateMixin {
@@ -35,6 +36,12 @@ class KhemraScannerController extends GetxController
   @override
   void onInit() {
     super.onInit();
+    
+    SystemChrome.setPreferredOrientations([
+      DeviceOrientation.landscapeLeft,
+      DeviceOrientation.landscapeRight,
+    ]);
+
     reloadAnimController = AnimationController(
       vsync: this,
       duration: const Duration(seconds: 1),
@@ -54,6 +61,13 @@ class KhemraScannerController extends GetxController
 
   @override
   void onClose() {
+    SystemChrome.setPreferredOrientations([
+      DeviceOrientation.portraitUp,
+      DeviceOrientation.portraitDown,
+      DeviceOrientation.landscapeLeft,
+      DeviceOrientation.landscapeRight,
+    ]);
+
     reloadAnimController.dispose();
     cameraCtrl.value?.dispose();
 
