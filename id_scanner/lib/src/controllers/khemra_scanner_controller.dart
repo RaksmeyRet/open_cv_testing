@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:get/get.dart';
 
 import '../image/image_cropper.dart';
@@ -35,6 +36,11 @@ class KhemraScannerController extends GetxController
   @override
   void onInit() {
     super.onInit();
+    
+    SystemChrome.setPreferredOrientations([
+      DeviceOrientation.portraitUp,
+    ]);
+
     reloadAnimController = AnimationController(
       vsync: this,
       duration: const Duration(seconds: 1),
