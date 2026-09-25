@@ -54,8 +54,6 @@ class KhemraScannerController extends GetxController
     genderController.addListener(_onFieldChanged);
     placeOfBirthController.addListener(_onFieldChanged);
     addressController.addListener(_onFieldChanged);
-
-    // Do not open camera immediately — show sample guide first.
   }
 
   @override
