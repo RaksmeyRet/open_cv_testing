@@ -1,4 +1,6 @@
 import 'dart:io';
+import 'dart:math' as math;
+import 'dart:ui';
 
 import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
@@ -29,6 +31,12 @@ class KhemraScannerScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final controller = Get.put(KhemraScannerController());
     return Obx(() {
+      if (controller.showSampleGuide.value) {
+        return _SampleGuideView(
+          primaryColor: primaryColor,
+          secondaryColor: secondaryColor,
+        );
+      }
       if (controller.showCamera.value) {
         return _CameraView(primaryColor: primaryColor);
       }
@@ -36,6 +44,234 @@ class KhemraScannerScreen extends StatelessWidget {
     });
   }
 }
+
+// ===========================================================================
+// Sample guide screen (shown before camera opens)
+// ===========================================================================
+
+class _SampleGuideView extends GetView<KhemraScannerController> {
+  const _SampleGuideView({
+    required this.primaryColor,
+    required this.secondaryColor,
+  });
+
+  final Color primaryColor;
+  final Color secondaryColor;
+
+  @override
+  Widget build(BuildContext context) {
+    final screenWidth = MediaQuery.of(context).size.width;
+    final screenHeight = MediaQuery.of(context).size.height;
+    final cardWidth = screenWidth * 0.47;
+    final cardHeight = cardWidth * 1.22;
+    final sampleInset = cardWidth * 0.075;
+    final cardLeft = (screenWidth - cardWidth) / 2;
+    final cardTop = (screenHeight - cardHeight) / 2 + screenHeight * 0.04;
+
+    return Scaffold(
+      backgroundColor: const Color(0xFF05070B),
+      body: Stack(
+        fit: StackFit.expand,
+        children: [
+          // Blurred background
+          Positioned.fill(
+            child: DecoratedBox(
+              decoration: const BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [Color(0xFF181C23), Color(0xFF07090D)],
+                ),
+              ),
+              child: Image.asset(
+                'packages/id_scanner/assets/id_card.png',
+                fit: BoxFit.cover,
+                color: const Color(0x99000000),
+                colorBlendMode: BlendMode.darken,
+              ),
+            ),
+          ),
+          Positioned.fill(
+            child: BackdropFilter(
+              filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
+              child: const SizedBox.expand(),
+            ),
+          ),
+          // Header text
+          SafeArea(
+            child: Align(
+              alignment: Alignment.topCenter,
+              child: Padding(
+                padding: const EdgeInsets.only(top: 34, left: 24, right: 24),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Text(
+                      'Sample ID card',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 24,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'Use this sample as a guide when taking your ID card photo.',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        color: Colors.white.withValues(alpha: 0.72),
+                        fontSize: 14,
+                        height: 1.4,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+          // Card shadow frame
+          Positioned(
+            left: cardLeft - cardWidth * 0.09,
+            top: cardTop - cardHeight * 0.06,
+            child: Container(
+              width: cardWidth * 1.18,
+              height: cardHeight * 1.12,
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(28),
+                color: const Color(0x33000000),
+                border: Border.all(color: const Color(0x55FFFFFF)),
+              ),
+            ),
+          ),
+          // Card with sample image
+          Positioned(
+            left: cardLeft,
+            top: cardTop,
+            child: Container(
+              width: cardWidth,
+              height: cardHeight,
+              decoration: BoxDecoration(
+                color: const Color(0xFFF4F5F7),
+                borderRadius: BorderRadius.circular(22),
+                border: Border.all(color: const Color(0xFFDBDEE4), width: 1.2),
+                boxShadow: const [
+                  BoxShadow(
+                    color: Color(0x3D000000),
+                    blurRadius: 24,
+                    offset: Offset(0, 18),
+                  ),
+                ],
+              ),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(22),
+                child: Padding(
+                  padding: EdgeInsets.all(sampleInset),
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: const Color(0xFFD3D7DC)),
+                    ),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(11),
+                      child: RotatedBox(
+                        quarterTurns: 1,
+                        child: Image.asset(
+                          'packages/id_scanner/assets/id_card.png',
+                          fit: BoxFit.contain,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+          // Close button
+          Positioned(
+            left: cardLeft + cardWidth - 32,
+            top: cardTop + cardHeight - 50,
+            child: GestureDetector(
+              onTap: controller.cancelSampleGuide,
+              child: Container(
+                width: 34,
+                height: 34,
+                decoration: const BoxDecoration(
+                  color: Color(0xFFF7F7F7),
+                  shape: BoxShape.circle,
+                  boxShadow: [
+                    BoxShadow(
+                      color: Color(0x44000000),
+                      blurRadius: 8,
+                      offset: Offset(0, 3),
+                    ),
+                  ],
+                ),
+                child: const Icon(
+                  Icons.close,
+                  color: Color(0xFFE53935),
+                  size: 21,
+                ),
+              ),
+            ),
+          ),
+          // Bottom controls preview (decorative)
+          Positioned(
+            left: 0,
+            right: 0,
+            bottom: 0,
+            child: ClipRRect(
+              borderRadius: const BorderRadius.vertical(
+                top: Radius.circular(24),
+              ),
+              child: BackdropFilter(
+                filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+                child: Container(
+                  height: 126,
+                  padding: const EdgeInsets.only(bottom: 18),
+                  decoration: const BoxDecoration(
+                    color: Color(0xDD111418),
+                    border: Border(top: BorderSide(color: Color(0x22FFFFFF))),
+                  ),
+                  child: const Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+                      Icon(
+                        Icons.photo_library_outlined,
+                        color: Color(0x99FFFFFF),
+                        size: 30,
+                      ),
+                      SizedBox(
+                        width: 66,
+                        height: 66,
+                        child: DecoratedBox(
+                          decoration: BoxDecoration(
+                            color: Color(0xFFE8E8E8),
+                            shape: BoxShape.circle,
+                          ),
+                        ),
+                      ),
+                      Icon(
+                        Icons.flashlight_on_outlined,
+                        color: Color(0x99FFFFFF),
+                        size: 30,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ===========================================================================
+// Camera view
+// ===========================================================================
 
 class _CameraView extends GetView<KhemraScannerController> {
   const _CameraView({required this.primaryColor});
@@ -91,12 +327,35 @@ class _CameraView extends GetView<KhemraScannerController> {
   Widget _buildCameraReady(CameraController camera) {
     return LayoutBuilder(
       builder: (context, constraints) {
-        final frameWidth = constraints.maxWidth * 0.82;
-        final frameHeight = frameWidth / 1.57;
+        final isLandscape = constraints.maxWidth > constraints.maxHeight;
+        final headerHeight = isLandscape ? 78.0 : 104.0;
+        const controlsHeight = 118.0;
+        const frameAspectRatio = 0.592;
+
+        final cameraAreaHeight =
+            constraints.maxHeight - headerHeight - controlsHeight;
+        final maxFrameWidth =
+            isLandscape
+                ? constraints.maxWidth * 0.46
+                : constraints.maxWidth * 0.78;
+        final maxFrameHeight = maxFrameWidth / frameAspectRatio;
+        const minimumFrameHeight = 160.0;
+        final frameHeightLimit = math.max(
+          1.0,
+          math.min(maxFrameHeight, cameraAreaHeight),
+        );
+        final frameHeight = math.min(
+          frameHeightLimit,
+          math.max(
+            math.min(minimumFrameHeight, frameHeightLimit),
+            cameraAreaHeight * (isLandscape ? 0.78 : 0.62),
+          ),
+        );
+        final frameWidth = frameHeight * frameAspectRatio;
         final frameRect = Rect.fromCenter(
           center: Offset(
             constraints.maxWidth / 2,
-            constraints.maxHeight * 0.49,
+            headerHeight + cameraAreaHeight / 2,
           ),
           width: frameWidth,
           height: frameHeight,
@@ -111,9 +370,17 @@ class _CameraView extends GetView<KhemraScannerController> {
             SafeArea(
               child: Column(
                 children: [
-                  _CameraHeader(primaryColor: primaryColor),
+                  _CameraHeader(
+                    primaryColor: primaryColor,
+                    height: headerHeight,
+                    isLandscape: isLandscape,
+                  ),
                   const Spacer(),
-                  _CameraControls(camera: camera),
+                  _CameraControls(
+                    camera: camera,
+                    height: controlsHeight,
+                    isLandscape: isLandscape,
+                  ),
                 ],
               ),
             ),
@@ -141,16 +408,25 @@ class _CameraPreview extends StatelessWidget {
 }
 
 class _CameraHeader extends GetView<KhemraScannerController> {
-  const _CameraHeader({required this.primaryColor});
+  const _CameraHeader({
+    required this.primaryColor,
+    required this.height,
+    required this.isLandscape,
+  });
 
   final Color primaryColor;
+  final double height;
+  final bool isLandscape;
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      height: 104,
-      padding: const EdgeInsets.fromLTRB(20, 8, 20, 8),
-      decoration: const BoxDecoration(color: Color(0xFF181A1B)),
+      height: height,
+      padding: EdgeInsets.fromLTRB(isLandscape ? 28 : 20, 8, 20, 8),
+      decoration: const BoxDecoration(
+        color: Color(0xFF181A1B),
+        borderRadius: BorderRadius.vertical(bottom: Radius.circular(20)),
+      ),
       child: Stack(
         children: [
           Align(
@@ -158,22 +434,22 @@ class _CameraHeader extends GetView<KhemraScannerController> {
             child: IconButton(
               tooltip: 'Back',
               onPressed: controller.closeAndPop,
-              icon: const Icon(
+              icon: Icon(
                 Icons.arrow_back_ios_new_rounded,
                 color: Colors.white,
-                size: 18,
+                size: isLandscape ? 22 : 26,
               ),
             ),
           ),
-          const Center(
+          Center(
             child: Padding(
-              padding: EdgeInsets.symmetric(horizontal: 50),
+              padding: const EdgeInsets.symmetric(horizontal: 50),
               child: Text(
-                'ថតរូបអត្តសញ្ញាណប័ណ្ណ',
+                'សូមថតរូបអត្តសញ្ញាណប័ណ្ណ\nនៅផ្នែកខាងមុខ',
                 textAlign: TextAlign.center,
                 style: TextStyle(
                   color: Colors.white,
-                  fontSize: 18,
+                  fontSize: isLandscape ? 14 : 15,
                   fontWeight: FontWeight.w600,
                   height: 2,
                 ),
@@ -187,9 +463,15 @@ class _CameraHeader extends GetView<KhemraScannerController> {
 }
 
 class _CameraControls extends GetView<KhemraScannerController> {
-  const _CameraControls({required this.camera});
+  const _CameraControls({
+    required this.camera,
+    required this.height,
+    required this.isLandscape,
+  });
 
   final CameraController camera;
+  final double height;
+  final bool isLandscape;
 
   @override
   Widget build(BuildContext context) {
@@ -198,8 +480,13 @@ class _CameraControls extends GetView<KhemraScannerController> {
       final picking = controller.isPicking.value;
 
       return Container(
-        height: 118,
-        padding: const EdgeInsets.fromLTRB(40, 14, 40, 16),
+        height: height,
+        padding: EdgeInsets.fromLTRB(
+          isLandscape ? 64 : 40,
+          isLandscape ? 8 : 14,
+          isLandscape ? 64 : 40,
+          isLandscape ? 10 : 16,
+        ),
         decoration: const BoxDecoration(
           color: Color(0xFF181A1B),
           borderRadius: BorderRadius.vertical(top: Radius.circular(32)),
@@ -211,6 +498,9 @@ class _CameraControls extends GetView<KhemraScannerController> {
             ScannerToolButton(
               icon: Icons.photo_library_outlined,
               label: 'រូបភាព',
+              labelOnLeft: true,
+              buttonSize: 50,
+              iconSize: 30,
               onPressed:
                   picking
                       ? null
@@ -225,7 +515,7 @@ class _CameraControls extends GetView<KhemraScannerController> {
               child: IconButton(
                 tooltip: 'Capture ID card',
                 onPressed: picking ? null : controller.takePhoto,
-                icon: const SizedBox(
+                icon: SizedBox(
                   width: 78,
                   height: 78,
                   child: DecoratedBox(
@@ -235,7 +525,7 @@ class _CameraControls extends GetView<KhemraScannerController> {
                         BorderSide(color: Colors.white, width: 2),
                       ),
                     ),
-                    child: Padding(
+                    child: const Padding(
                       padding: EdgeInsets.all(6),
                       child: DecoratedBox(
                         decoration: BoxDecoration(
@@ -253,7 +543,10 @@ class _CameraControls extends GetView<KhemraScannerController> {
                   isTorchOn
                       ? Icons.flash_on_rounded
                       : Icons.flashlight_on_rounded,
-              label: 'ពន្លឺ',
+              label: 'ពិល',
+              labelOnLeft: true,
+              buttonSize: 50,
+              iconSize: 30,
               active: isTorchOn,
               onPressed: picking ? null : controller.toggleFlash,
             ),

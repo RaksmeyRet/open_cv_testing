@@ -22,7 +22,8 @@ class KhemraScannerController extends GetxController
 
   final frontImage = Rxn<File>();
   final cameraCtrl = Rxn<CameraController>();
-  final showCamera = true.obs;
+  final showCamera = false.obs;
+  final showSampleGuide = true.obs;
   final isPicking = false.obs;
   final errorMessage = RxnString();
   final _formTick = 0.obs;
@@ -48,7 +49,7 @@ class KhemraScannerController extends GetxController
     placeOfBirthController.addListener(_onFieldChanged);
     addressController.addListener(_onFieldChanged);
 
-    openCamera();
+    // Do not open camera immediately — show sample guide first.
   }
 
   @override
@@ -67,6 +68,12 @@ class KhemraScannerController extends GetxController
     _ocrService.dispose();
 
     super.onClose();
+  }
+
+  void cancelSampleGuide() {
+    showSampleGuide.value = false;
+    showCamera.value = true;
+    openCamera();
   }
 
   Future<void> openCamera() async {
