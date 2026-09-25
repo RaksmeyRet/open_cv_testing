@@ -245,18 +245,7 @@ class _PhotoTile extends StatelessWidget {
 // Main KhemraScannerScreen
 // ---------------------------------------------------------------------------
 
-/// The main scanner screen widget.
-///
-/// Push this screen onto the navigator and await it to receive a
-/// [KhemraScanResult] (or `null` if the user cancelled):
-///
-/// ```dart
-/// final result = await Navigator.of(context).push<KhemraScanResult>(
-///   MaterialPageRoute(builder: (_) => KhemraScannerScreen(
-///     ocrBaseUrl: 'http://your-ocr-server:8212',
-///   )),
-/// );
-/// ```
+
 class KhemraScannerScreen extends StatefulWidget {
   const KhemraScannerScreen({
     this.primaryColor = const Color(0xFF092469),
