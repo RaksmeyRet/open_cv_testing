@@ -2,26 +2,18 @@ import 'dart:io';
 
 import 'package:google_mlkit_text_recognition/google_mlkit_text_recognition.dart'
     as mlkit;
+import 'package:id_scanner/id_scanner.dart';
 import 'package:image/image.dart' as img;
 import 'package:native_opencv_kit/native_opencv.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:tesseract_ocr/ocr_engine_config.dart';
 import 'package:tesseract_ocr/tesseract_ocr.dart';
 
-/// Result of an OCR service call.
-class OcrServiceResult {
-  const OcrServiceResult({required this.values, this.error});
-
-  /// Extracted field values (same order as [IdCardData.defaultFieldLabels]).
+class _OcrRawResult {
+  const _OcrRawResult(this.values);
   final List<String> values;
-
-  /// Non-null if the OCR call failed.
-  final String? error;
-
-  bool get isSuccess => error == null;
 }
 
-/// On-device OCR service using Google ML Kit.
 class OcrService {
   OcrService();
 
@@ -35,8 +27,7 @@ class OcrService {
     _localRecognizer.close();
   }
 
-  /// Runs OCR locally on [imageFile] and returns an [OcrServiceResult].
-  Future<OcrServiceResult> recognize(File imageFile) async {
+  Future<KhemraScanResult?> recognize(File imageFile) async {
     File? preparedFile;
     try {
       preparedFile = await _prepareWithCppPipeline(imageFile);
@@ -57,16 +48,21 @@ class OcrService {
         ),
         localResult,
       );
-      if (result != null) return result;
-      return OcrServiceResult(
-        values: List.filled(_fieldCount, ''),
-        error: 'Local OCR could not recognize any ID-card fields.',
+      
+      if (result == null) return null;
+      
+      return KhemraScanResult(
+        idNumber: result.values[0].isNotEmpty ? result.values[0] : null,
+        surname: result.values[1].isNotEmpty ? result.values[1] : null,
+        username: result.values[2].isNotEmpty ? result.values[2] : null,
+        dateOfBirth: result.values[3].isNotEmpty ? result.values[3] : null,
+        expiryDate: result.values[4].isNotEmpty ? result.values[4] : null,
+        gender: result.values[5].isNotEmpty ? result.values[5] : null,
+        placeOfBirth: result.values[6].isNotEmpty ? result.values[6] : null,
+        address: result.values[7].isNotEmpty ? result.values[7] : null,
       );
     } catch (error) {
-      return OcrServiceResult(
-        values: List.filled(_fieldCount, ''),
-        error: 'Local OCR failed: $error',
-      );
+      throw Exception('OCR processing failed: $error');
     } finally {
       if (preparedFile != null) {
         try {
@@ -78,9 +74,9 @@ class OcrService {
     }
   }
 
-  OcrServiceResult? _mergeResults(
-    OcrServiceResult? first,
-    OcrServiceResult? second,
+  _OcrRawResult? _mergeResults(
+    _OcrRawResult? first,
+    _OcrRawResult? second,
   ) {
     if (first == null && second == null) return null;
     final values = List<String>.filled(_fieldCount, '');
@@ -89,7 +85,7 @@ class OcrService {
       final secondValue = second?.values[index].trim() ?? '';
       values[index] = firstValue.isNotEmpty ? firstValue : secondValue;
     }
-    return OcrServiceResult(values: values);
+    return _OcrRawResult(values);
   }
 
   Future<File?> _prepareWithCppPipeline(File imageFile) async {
@@ -129,7 +125,7 @@ class OcrService {
     }
   }
 
-  Future<OcrServiceResult?> _recognizeWithTesseract(File imageFile) async {
+  Future<_OcrRawResult?> _recognizeWithTesseract(File imageFile) async {
     try {
       final text = await TesseractOcr.extractText(
         imageFile.path,
@@ -148,7 +144,7 @@ class OcrService {
     }
   }
 
-  Future<OcrServiceResult?> _recognizeLocally(File imageFile) async {
+  Future<_OcrRawResult?> _recognizeLocally(File imageFile) async {
     try {
       final text = await _readTextAtUsefulScales(imageFile);
       return _resultFromText(text);
@@ -158,7 +154,7 @@ class OcrService {
     return null;
   }
 
-  Future<OcrServiceResult?> _recognizeTopZoneWithTesseract(
+  Future<_OcrRawResult?> _recognizeTopZoneWithTesseract(
     File imageFile,
   ) async {
     File? topZoneFile;
@@ -195,7 +191,7 @@ class OcrService {
     }
   }
 
-  OcrServiceResult? _resultFromText(String text) {
+  _OcrRawResult? _resultFromText(String text) {
     try {
       final upperText = text.toUpperCase();
       final compact = upperText.replaceAll(RegExp(r'[^A-Z0-9<]'), '');
@@ -232,7 +228,7 @@ class OcrService {
       }
 
       if (values.any((value) => value.isNotEmpty)) {
-        return OcrServiceResult(values: values);
+        return _OcrRawResult(values);
       }
     } catch (_) {
       // Ignore malformed OCR output and let the fallback recognizer run.

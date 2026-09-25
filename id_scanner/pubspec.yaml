@@ -11,7 +11,7 @@ dependencies:
   flutter:
     sdk: flutter
 
-  # OpenCV FFI plugin (the parent package in this monorepo)
+ 
   native_opencv_kit:
     path: ../
 

@@ -1,11 +1,8 @@
-/// Structured data fields extracted from a Cambodian ID card.
 class IdCardData {
   const IdCardData({required this.fieldLabels, required this.fieldLabelsKhmer});
 
   final List<String> fieldLabels;
   final List<String> fieldLabelsKhmer;
-
-  /// Default Cambodian ID card field labels (English).
   static const List<String> defaultFieldLabels = [
     'ID number',
     'Surname',
