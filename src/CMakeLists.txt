@@ -11,7 +11,6 @@ find_package(OpenCV REQUIRED)
 add_library(native_opencv SHARED
     native_opencv.cpp
     BlurDetector.cpp
-    local_ocr.cpp
 )
 
 # Link OpenCV and the NDK's libc++ to your shared library
@@ -22,4 +21,5 @@ target_link_libraries(native_opencv PRIVATE
 
 target_include_directories(native_opencv PRIVATE
     ${CMAKE_CURRENT_LIST_DIR}/../cpp_project/include
+    ${CMAKE_CURRENT_LIST_DIR}/../example/third_party
 )

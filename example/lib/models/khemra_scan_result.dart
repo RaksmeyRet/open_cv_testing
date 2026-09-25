@@ -26,14 +26,30 @@ class KhemraScanResult {
   ].where((value) => value != null && value.trim().isNotEmpty).join(' ');
 
   factory KhemraScanResult.fromJson(Map<String, dynamic> json) {
-    final fields =
-        json['fields'] is Map
-            ? Map<String, dynamic>.from(json['fields'] as Map)
-            : json;
+    final fields = <String, dynamic>{};
+
+    void collect(dynamic source) {
+      if (source is Map) {
+        for (final entry in source.entries) {
+          final key = entry.key.toString();
+          final value = entry.value;
+          if (value is Map || value is List) {
+            collect(value);
+          }
+          fields[key] = value;
+        }
+      } else if (source is List) {
+        for (final item in source) {
+          collect(item);
+        }
+      }
+    }
+
+    collect(json);
 
     String? value(List<String> keys) {
       for (final key in keys) {
-        final candidate = fields[key] ?? json[key];
+        final candidate = fields[key];
         if (candidate != null && '$candidate'.trim().isNotEmpty) {
           return '$candidate'.trim();
         }
@@ -53,8 +69,21 @@ class KhemraScanResult {
       ]),
       expiryDate: value(['Expiry date', 'expiry_date', 'expirydate', 'expiry']),
       gender: value(['Gender', 'gender', 'sex']),
-      placeOfBirth: value(['Place of birth', 'place_of_birth', 'placeofbirth']),
-      address: value(['Address', 'address']),
+      placeOfBirth: value([
+        'Place of birth',
+        'place_of_birth',
+        'placeofbirth',
+        'birth_place',
+        'birthplace',
+        'location_of_birth',
+      ]),
+      address: value([
+        'Address',
+        'address',
+        'home_address',
+        'current_address',
+        'residence',
+      ]),
     );
   }
 

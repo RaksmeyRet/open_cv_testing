@@ -47,13 +47,13 @@ struct DetectionConfig {
     int contour_morph_kernel = 5;
     int contour_dilate_iters = 2;
     int contour_close_iters = 2;
-    int contour_max_check = 30;
-    double contour_area_min_ratio = 0.03;
+    int contour_max_check = 120;
+    double contour_area_min_ratio = 0.003;
     double contour_area_max_ratio = 0.97;
     double contour_approx_epsilon_frac = 0.02;
 
     // If contour confidence (0-100) is below this, fall back to Hough-line pipeline
-    float contour_confidence_threshold = 80.0f;
+    float contour_confidence_threshold = 45.0f;
 };
 
 struct RectangleSupportInfo {

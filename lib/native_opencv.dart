@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:ffi';
 import 'dart:io';
 import 'dart:typed_data';
@@ -23,6 +24,34 @@ typedef BlurCheckDart =
 // ---------------------------------------------------------------------------
 typedef GetIntC = Int32 Function();
 typedef GetIntDart = int Function();
+
+// ---------------------------------------------------------------------------
+// get_ocr_output_height
+// ---------------------------------------------------------------------------
+typedef GetOcrOutputHeightC = Int32 Function(Int32 width, Int32 height);
+typedef GetOcrOutputHeightDart = int Function(int width, int height);
+
+// ---------------------------------------------------------------------------
+// preprocess_ocr_image
+// ---------------------------------------------------------------------------
+typedef PreprocessOcrImageC =
+    Bool Function(
+      Pointer<Uint8> inputPixels,
+      Int32 width,
+      Int32 height,
+      Pointer<Uint8> outputPixels,
+    );
+typedef PreprocessOcrImageDart =
+    bool Function(
+      Pointer<Uint8> inputPixels,
+      int width,
+      int height,
+      Pointer<Uint8> outputPixels,
+    );
+
+typedef ExtractKhmerLocationsC = Pointer<Utf8> Function(Pointer<Utf8> rawText);
+typedef ExtractKhmerLocationsDart =
+    Pointer<Utf8> Function(Pointer<Utf8> rawText);
 
 // ---------------------------------------------------------------------------
 // crop_id_card
@@ -81,6 +110,23 @@ class NativeOpencv {
           .lookup<NativeFunction<GetIntC>>('get_id_card_output_height')
           .asFunction();
 
+  static final GetOcrOutputHeightDart _getOcrOutputHeight =
+      _lib
+          .lookup<NativeFunction<GetOcrOutputHeightC>>('get_ocr_output_height')
+          .asFunction();
+
+  static final PreprocessOcrImageDart _preprocessOcrImage =
+      _lib
+          .lookup<NativeFunction<PreprocessOcrImageC>>('preprocess_ocr_image')
+          .asFunction();
+
+  static final ExtractKhmerLocationsDart _extractKhmerLocations =
+      _lib
+          .lookup<NativeFunction<ExtractKhmerLocationsC>>(
+            'extract_khmer_locations',
+          )
+          .asFunction();
+
   static final CropIdCardDart _cropIdCard =
       _lib.lookup<NativeFunction<CropIdCardC>>('crop_id_card').asFunction();
 
@@ -113,6 +159,58 @@ class NativeOpencv {
 
   static int get idCardOutputWidth => _getIdCardOutputWidth();
   static int get idCardOutputHeight => _getIdCardOutputHeight();
+
+  /// Returns the height produced by the cpp_project OCR preprocessing pass.
+  static int getOcrOutputHeight(int width, int height) {
+    return _getOcrOutputHeight(width, height);
+  }
+
+  /// Runs cpp_project's resize, denoise, threshold, and morphology pipeline.
+  /// Returns a packed grayscale image, or null when preprocessing fails.
+  static Uint8List? preprocessOcrImage(
+    Uint8List rgbaBytes,
+    int width,
+    int height,
+  ) {
+    final outputHeight = getOcrOutputHeight(width, height);
+    if (outputHeight <= 0) return null;
+    final outputLength = 2000 * outputHeight;
+    final inputPointer = malloc<Uint8>(rgbaBytes.length);
+    final outputPointer = malloc<Uint8>(outputLength);
+
+    try {
+      inputPointer.asTypedList(rgbaBytes.length).setAll(0, rgbaBytes);
+      final success = _preprocessOcrImage(
+        inputPointer,
+        width,
+        height,
+        outputPointer,
+      );
+      if (!success) return null;
+      return Uint8List.fromList(outputPointer.asTypedList(outputLength));
+    } finally {
+      malloc.free(inputPointer);
+      malloc.free(outputPointer);
+    }
+  }
+
+  /// Extracts place-of-birth and address using cpp_project's Khmer parser.
+  static Map<String, String>? extractKhmerLocations(String rawText) {
+    final inputPointer = rawText.toNativeUtf8();
+    try {
+      final output = _extractKhmerLocations(inputPointer).toDartString();
+      final decoded = jsonDecode(output);
+      if (decoded is! Map) return null;
+      return <String, String>{
+        'place_of_birth': decoded['place_of_birth']?.toString() ?? '',
+        'address': decoded['address']?.toString() ?? '',
+      };
+    } catch (_) {
+      return null;
+    } finally {
+      malloc.free(inputPointer);
+    }
+  }
 
   /// [rgbaBytes] is the source frame's RGBA buffer (any width/height).
   /// Returns a tightly-packed RGBA buffer of size

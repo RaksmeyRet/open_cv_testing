@@ -4,6 +4,8 @@
             "name": "Win32",
             "includePath": [
                 "${workspaceFolder}/**",
+                "${workspaceFolder}/cpp_project/include",
+                "${workspaceFolder}/android/sdk/native/jni/include",
                 "${workspaceFolder}/example/third_party"
             ],
             "defines": [],
@@ -13,4 +15,4 @@
         }
     ],
     "version": 4
-}  
+}

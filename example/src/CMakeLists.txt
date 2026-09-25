@@ -7,7 +7,6 @@ find_package(OpenCV REQUIRED)
 add_library(native_opencv SHARED
     native_opencv.cpp
     BlurDetector.cpp
-    local_ocr.cpp
 )
 
 # Link OpenCV and the NDK's libc++ to your shared library
