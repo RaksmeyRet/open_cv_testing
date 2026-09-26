@@ -1,7 +1,7 @@
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
-import 'package:native_opencv_kit/native_opencv.dart';
+import '../native_opencv.dart';
 
 /// A higher-level document detector built on top of the native OpenCV layer.
 ///

@@ -3,7 +3,7 @@ import 'dart:io';
 import 'package:google_mlkit_text_recognition/google_mlkit_text_recognition.dart'
     as mlkit;
 import 'package:image/image.dart' as img;
-import 'package:native_opencv_kit/native_opencv.dart';
+import '../native_opencv.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:tesseract_ocr/ocr_engine_config.dart';
 import 'package:tesseract_ocr/tesseract_ocr.dart';

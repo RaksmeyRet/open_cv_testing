@@ -6,7 +6,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:image/image.dart' as img;
-import 'package:native_opencv_kit/native_opencv.dart';
+import '../native_opencv.dart';
 import 'package:path_provider/path_provider.dart';
 
 // ---------------------------------------------------------------------------

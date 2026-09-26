@@ -8,8 +8,7 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
-  native_opencv_kit:
-    path: ../
+
   ffi: ^2.2.0
   plugin_platform_interface: ^2.0.2
   cupertino_icons: ^1.0.8
@@ -17,7 +16,7 @@ dependencies:
   get: ^4.7.3
   image: ^4.8.0
   image_picker: ^1.2.1
-  image_cropper: ^8.0.2
+  image_cropper: ^8.1.0
   permission_handler: ^12.0.3
   path_provider: ^2.1.1
   http: ^1.6.0
@@ -39,4 +38,3 @@ flutter:
     - assets/id_card.png
     - assets/tessdata_config.json
     - assets/tessdata/
-    

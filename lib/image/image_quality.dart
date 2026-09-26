@@ -1,4 +1,4 @@
-import 'package:native_opencv_kit/native_opencv.dart';
+import '../native_opencv.dart';
 
 /// Checks whether an image is blurred using native OpenCV.
 abstract final class ImageQuality {
