@@ -277,7 +277,7 @@ class KhemraScannerScreen extends StatefulWidget {
 class _KhemraScannerScreenState extends State<KhemraScannerScreen>
     with SingleTickerProviderStateMixin, WidgetsBindingObserver {
   final List<TextEditingController> _controllers = List.generate(
-    IdCardData.defaultFieldLabels.length,
+    IdCardData.defaults().fieldLabels.length,
     (_) => TextEditingController(),
   );
 
@@ -292,9 +292,8 @@ class _KhemraScannerScreenState extends State<KhemraScannerScreen>
 
   late final OcrService _ocrService;
 
-  static const List<String> _fieldLabels = IdCardData.defaultFieldLabels;
-  static const List<String> _fieldLabelsKhmer =
-      IdCardData.defaultFieldLabelsKhmer;
+  final _fieldLabels = IdCardData.defaults().fieldLabels;
+  final _fieldLabelsKhmer = IdCardData.defaults().fieldLabelsKhmer;
 
   @override
   void initState() {
