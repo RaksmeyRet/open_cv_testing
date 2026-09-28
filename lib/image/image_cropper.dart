@@ -109,7 +109,7 @@ Future<Uint8List> _cropImageInBackground(Map<String, dynamic> input) async {
 }
 
 // ---------------------------------------------------------------------------
-// GetX controller
+// Corner normalisation helpers
 // ---------------------------------------------------------------------------
 
 List<Offset> normalizeCardCorners(List<Offset> corners) {
@@ -155,6 +155,10 @@ List<Offset> normalizeDetectedCornersForDisplay(
       )
       .toList();
 }
+
+// ---------------------------------------------------------------------------
+// GetX controller
+// ---------------------------------------------------------------------------
 
 /// Controller for the four-corner crop screen.
 class ImageCropperController extends GetxController {

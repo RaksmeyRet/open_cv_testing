@@ -26,14 +26,14 @@ class KhemraScanResult {
 
   factory KhemraScanResult.fromJson(Map<String, dynamic> json) {
     return KhemraScanResult(
-      idNumber: json['id_number'],
-      surname: json['surname_en'],
-      username: json['username_en'],
-      dateOfBirth: json['date_of_birth'],
-      expiryDate: json['expiry_date'],
-      gender: json['gender'],
-      placeOfBirth: json['place_of_birth'],
-      address: json['address'],
+      idNumber: json['id_number'] ?? '',
+      surname: json['surname_en'] ?? '',
+      username: json['username_en'] ?? '',
+      dateOfBirth: json['date_of_birth'] ?? '',
+      expiryDate: json['expiry_date'] ?? '',
+      gender: json['gender'] ?? '',
+      placeOfBirth: json['place_of_birth'] ?? '',
+      address: json['address'] ?? '',
     );
   }
 
